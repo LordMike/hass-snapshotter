@@ -1,0 +1,8 @@
+services:
+  ha-snapshotter:
+    build: .
+    image: ha-snapshotter:dev
+    env_file: .env
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

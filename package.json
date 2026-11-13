@@ -1,0 +1,19 @@
+{
+  "name": "ha-snapshotter",
+  "version": "0.1.0",
+  "description": "Render Home Assistant dashboard paths to PNG for e-paper displays, starting a browser only for the duration of a render.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@opendisplay/epaper-dithering": "^7.0.0",
+    "puppeteer-core": "^24.26.1",
+    "sharp": "^0.34.4"
+  }
+}
