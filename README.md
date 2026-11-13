@@ -9,7 +9,7 @@ turns that into a PNG. Each render runs in a short-lived child process, so
 between renders only a ~20 MB Node process is running. A render takes well
 under a second on a desktop (~85 MB peak).
 
-## Install as a Home Assistant app
+## Install as a Home Assistant app (recommended)
 
 1. Copy this folder to `/addons/ha_snapshotter` on the HA host (Samba, SSH).
 2. Settings → Apps → App store → ⋮ → Check for updates; "ha-snapshotter"
