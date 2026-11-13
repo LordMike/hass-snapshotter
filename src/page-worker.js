@@ -1,4 +1,4 @@
-// Renders one browser-free page in a child process, then exits, so Takumi,
+// Renders one page in a child process, then exits, so Takumi,
 // fonts, icons and sharp are not held in memory between renders.
 import { HassClient } from "./hass.js";
 import { renderPageModule } from "./pages.js";

@@ -1,30 +1,25 @@
 name: ha-snapshotter
-version: "0.1.0"
+version: "0.2.0"
 slug: ha_snapshotter
-description: Render Home Assistant dashboard paths to PNG for e-paper displays, without keeping a browser running
+description: Render Home Assistant data to PNG images for e-paper displays, without a browser
 arch:
   - aarch64
   - amd64
 init: false
 startup: application
 boot: auto
-# Browser-free pages live in this app's config folder: /addon_configs/<slug>/pages/<name>.js
+# Pages live in this app's config folder: /addon_configs/<slug>/pages/<name>.js
 map:
   - addon_config:rw
 ports:
   8080/tcp: 10010
 ports_description:
-  8080/tcp: Render endpoint (/render/<path>)
+  8080/tcp: Render endpoint (/page/<name>)
 options:
   ha_url: "http://homeassistant:8123"
   ha_token: ""
-  allowed_paths: []
-  browser_idle_seconds: 0
-  ready_timeout_ms: 45000
+  render_timeout_ms: 30000
 schema:
   ha_url: url
   ha_token: password
-  allowed_paths:
-    - str
-  browser_idle_seconds: int(0,3600)
-  ready_timeout_ms: int(5000,120000)
+  render_timeout_ms: int(1000,120000)

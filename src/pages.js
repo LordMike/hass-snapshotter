@@ -1,4 +1,4 @@
-// Browser-free mode: a page is a JS module that turns `hass` into HTML, and
+// A page is a JS module that turns `hass` into HTML, and
 // Takumi (a Rust HTML/CSS renderer) turns the HTML into a PNG.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
