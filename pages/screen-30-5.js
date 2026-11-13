@@ -94,8 +94,8 @@ export default function render(hass, { html, mdi, now }) {
   };
   const isDoor = (id) => id.includes("door_") || attr(id, "device_class") === "door";
   const isWindow = (id) => id.includes("window_") || attr(id, "device_class") === "window";
-  // No entity/device/area registry without the frontend, so this is the Vue fallback: the friendly name.
-  const entityAreaName = (id) => friendly(id);
+  // The area's name (several open windows in one room become one "Stue"); else the friendly name.
+  const entityAreaName = (id) => hass.areas[hass.entities[id]?.area_id]?.name ?? friendly(id);
   const buildAreaStatusLines = (entities) => {
     const names = [...new Set(entities.map(entityAreaName))];
     if (names.length === 0) return ["", ""];

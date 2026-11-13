@@ -147,6 +147,14 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   mark("load");
 
   const fetched = Object.create(null);
+  // hass.areas / hass.entities: fetched only when a page reads them.
+  let registry = null;
+  let wantsRegistry = false;
+  const fromRegistry = (key) => {
+    if (registry) return registry[key];
+    wantsRegistry = true;
+    return Object.freeze(Object.create(null));
+  };
 
   const warnings = new Set();
   const ctx = {
@@ -164,7 +172,13 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   for (let pass = 1; ; pass++) {
     const missing = new Set();
     read = new Set();
-    const hass = { states: recordingStates(fetched, missing, read), config, language: config.language };
+    const hass = {
+      states: recordingStates(fetched, missing, read),
+      get areas() { return fromRegistry("areas"); },
+      get entities() { return fromRegistry("entities"); },
+      config,
+      language: config.language,
+    };
     let error = null;
     try {
       const out = await page.default(hass, ctx);
@@ -176,15 +190,16 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
       error = err; // often just data that isn't fetched yet
     }
     mark("template");
-    if (missing.size === 0) {
+    const needRegistry = wantsRegistry && !registry;
+    if (missing.size === 0 && !needRegistry) {
       if (error) {
         const unknown = [...read].filter((id) => fetched[id] === null);
         throw fail(500, `${name}.js${lineOf(error, name)}: ${error.message}` + (unknown.length ? ` (entities not found in HA: ${unknown.join(", ")})` : ""));
       }
       break;
     }
-    if (pass === MAX_PASSES) throw fail(500, `${name}.js still reads new entities after ${MAX_PASSES} passes: ${[...missing].join(", ")}`);
-    await client.fetchStates(missing, fetched);
+    if (pass === MAX_PASSES) throw fail(500, `${name}.js still reads new entities after ${MAX_PASSES} passes: ${[...missing].join(", ") || "(areas)"}`);
+    await Promise.all([client.fetchStates(missing, fetched), needRegistry && client.fetchAreas().then((r) => (registry = r))]);
     mark("fetch");
   }
   for (const id of read) if (fetched[id] === null) warnings.add(`entity not found: ${id}`);

@@ -58,8 +58,13 @@ export default function render(hass, { html, raw, mdi, now, timeZone, locale, pa
 - `hass.states` works like the frontend's: the page reads what it needs, and
   all states are fetched in one request. Unknown entities read as `undefined` and are
   listed in the `X-Render-Warnings` response header and the log.
-  `hass.config` is HA's `/api/config`. There is no way to list all entities or
-  call services or websocket commands.
+  `hass.config` is HA's `/api/config`.
+- `hass.areas[area_id]` (`{ area_id, name }`) and `hass.entities[entity_id]`
+  (`{ entity_id, area_id }`) work like the frontend's, except that an
+  entity's `area_id` already falls back to its device's area. They cost one
+  extra request, made only if the page reads them; entities without an area
+  are absent. There is no way to list all entities or call services or
+  websocket commands.
 - `html` escapes interpolated values; `raw()` passes trusted markup (an SVG
   chart) through. Escaping does not cover CSS, so don't put entity values in
   `style="..."`. `mdi("mdi:name", { size, color })` gives any Material Design

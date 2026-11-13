@@ -1,5 +1,5 @@
 name: hass-snapshotter (local build)
-version: "0.4.3"
+version: "0.4.4"
 slug: hass_snapshotter
 description: Render Home Assistant data to PNG images for e-paper displays, without a browser
 arch:
