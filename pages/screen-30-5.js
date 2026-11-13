@@ -254,6 +254,18 @@ export default function render(hass, { html, mdi, now }) {
   const windDetail =
     windSpeed == null ? "—" : windSpeed < 3 ? "Næsten vindstille" : windSpeed < 8 ? "Svag vind" : windSpeed < 14 ? "Frisk vind" : windSpeed < 20 ? "Hård vind" : "Storm";
 
+  // --- Today's high/low: the daily forecast for today when it still lists it, otherwise
+  // today's remaining hourly forecast plus the current temperature (misses an earlier low). ---
+  const FORECAST = "input_text.weather_openweathermap_forecast";
+  const isTodayEntry = (e) => e?.datetime && local(new Date(e.datetime)).key === n.key;
+  const todayDaily = (attr(FORECAST, "forecast_daily") || []).find(isTodayEntry);
+  const todayTemps = todayDaily
+    ? [todayDaily.temperature, todayDaily.templow]
+    : [t, ...(attr(FORECAST, "forecast_hourly") || []).filter(isTodayEntry).map((e) => e.temperature)];
+  const temps = todayTemps.map(Number).filter(Number.isFinite);
+  const tempHigh = temps.length ? `${Math.round(Math.max(...temps))}°` : "--";
+  const tempLow = temps.length ? `${Math.round(Math.min(...temps))}°` : "--";
+
   let uvIndex = "—";
   for (const id of UV_CANDIDATES) {
     const v = parseFloat(stateOf(id));
@@ -309,7 +321,7 @@ export default function render(hass, { html, mdi, now }) {
       .upcoming-title { margin-top: 6px; margin-bottom: 6px; font-size: 13px; line-height: 13px; }
       .upcoming-row { display: flex; align-items: center; height: 15px; font-size: 11px; line-height: 11px; white-space: nowrap; }
       .u-date { width: 69px; }
-      .u-time { width: 42px; }
+      .u-time { width: 64px; }
       .u-title { flex: 1; }
 
       .transport-panel { width: 238px; margin-left: 9px; padding-left: 7px; padding-right: 13px; }
@@ -345,6 +357,7 @@ export default function render(hass, { html, mdi, now }) {
       .strip-copy { display: flex; flex-direction: column; font-size: 12px; line-height: 12px; overflow: hidden; white-space: nowrap; }
       .strip-copy .title { margin-bottom: 6px; }
       .uv-index { font-size: 28px; line-height: 28px; }
+      .strip-temps { margin-left: auto; padding-right: 16px; display: flex; flex-direction: column; font-size: 15px; line-height: 18px; text-align: right; white-space: nowrap; }
     </style>
     <div class="screen">
       <div class="dashboard">
@@ -446,6 +459,7 @@ export default function render(hass, { html, mdi, now }) {
           <div class="strip-item" style="width: 233px">
             <div class="strip-icon">${icon("mdi:weather-windy", 34)}</div>
             <div class="strip-copy"><div class="title narrow">${windTitle}</div><div>${windDetail}</div></div>
+            <div class="strip-temps"><div>↑ ${tempHigh}</div><div>↓ ${tempLow}</div></div>
           </div>
           <div class="strip-item" style="flex: 1">
             <div class="strip-icon">${icon("mdi:weather-sunny", 34)}</div>
