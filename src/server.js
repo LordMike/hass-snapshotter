@@ -10,7 +10,6 @@ import { PALETTES } from "./image.js";
 const config = loadConfig();
 const MAX_WAITING = 8;
 
-const pageMemory = new Map(); // page name -> entity ids it read last time
 let haConfig = null; // HA's /api/config, reused across renders for an hour
 let haConfigAt = 0;
 
@@ -62,7 +61,7 @@ function runChild(name, params) {
           : fail(500, `Renderer for ${name} stopped unexpectedly (${signal ?? `exit ${code}`}); see the log`),
       );
     });
-    child.send({ config, name, params, knownIds: pageMemory.get(name) ?? [], haConfig, haConfigAt });
+    child.send({ config, name, params, haConfig, haConfigAt });
   });
 }
 
@@ -73,7 +72,6 @@ async function handlePage(res, file, query) {
   const params = { ...parseParams(query), format };
   const started = Date.now();
   const result = await render(name, params);
-  pageMemory.set(name, result.ids);
   ({ haConfig, haConfigAt } = result);
   result.timings.total = Date.now() - started;
   const timings = Object.entries(result.timings).map(([k, v]) => `${k}=${v}`).join(";");

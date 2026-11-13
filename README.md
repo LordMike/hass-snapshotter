@@ -50,7 +50,7 @@ export default function render(hass, { html, raw, mdi, now, timeZone, locale }) 
 
 - The default export is called for every render and returns markup.
 - `hass.states` works like the frontend's: the page reads what it needs, and
-  only those entities are fetched. Unknown entities read as `undefined` and are
+  all states are fetched in one request. Unknown entities read as `undefined` and are
   listed in the `X-Render-Warnings` response header and the log.
   `hass.config` is HA's `/api/config`. There is no way to list all entities or
   call services or websocket commands.

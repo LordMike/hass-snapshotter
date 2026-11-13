@@ -15,7 +15,6 @@ export class HassClient {
     const res = await fetch(this.base + path, { headers: this.headers, signal: AbortSignal.timeout(10000) }).catch((err) => {
       throw fail(502, `Cannot reach Home Assistant at ${this.base}: ${err.cause?.message ?? err.message}`);
     });
-    if (res.status === 404 && path.startsWith("/api/states/")) return null; // unknown entity
     if (res.status === 401 || res.status === 403) {
       const redirect = res.redirected ? ` (${this.base} redirected to ${new URL(res.url).origin}; use that as the HA URL)` : "";
       throw fail(502, `Home Assistant rejected the token (${res.status})${redirect}. Check ha_token, or leave it empty in the app to use the built-in connection`);
@@ -34,11 +33,14 @@ export class HassClient {
     return this.config;
   }
 
-  /** Fetches states for ids not already in `into`. Unknown entities become null. */
+  /**
+   * Fills `into` with the states of `ids`; unknown entities become null. All
+   * states are fetched in one request (about 1 MB for ~1000 entities), which
+   * is much faster than one request per entity through the Supervisor proxy.
+   */
   async fetchStates(ids, into) {
-    const todo = [...ids].filter((id) => !(id in into));
-    const results = await Promise.all(todo.map((id) => this.get(`/api/states/${encodeURIComponent(id)}`)));
-    todo.forEach((id, i) => (into[id] = results[i]));
+    this.all ??= new Map((await this.get("/api/states")).map((s) => [s.entity_id, s]));
+    for (const id of ids) if (!(id in into)) into[id] = this.all.get(id) ?? null;
   }
 }
 

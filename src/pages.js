@@ -84,11 +84,10 @@ function lineOf(err, name) {
 
 /**
  * Renders a page module.
- * @param {string[]} knownIds entities the page read last time, fetched up front
  * @param {"png"|"html"} format "html" returns the markup instead of an image
  * @returns {Promise<{png?: Buffer, markup?: string, timings: Record<string, number>, ids: string[], warnings: string[]}>}
  */
-export async function renderPageModule({ pagesDir, client }, name, { palette, format }, knownIds = []) {
+export async function renderPageModule({ pagesDir, client }, name, { palette, format }) {
   const timings = {};
   let last = Date.now();
   const mark = (k) => {
@@ -98,12 +97,15 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   };
 
   const page = await loadPage(pagesDir, name);
-  const [r, config] = await Promise.all([format === "html" ? null : getRenderer(pagesDir), client.getConfig()]);
+  // States are fetched in parallel with loading the renderer and fonts.
+  const [r, config] = await Promise.all([
+    format === "html" ? null : getRenderer(pagesDir),
+    client.getConfig(),
+    client.fetchStates([], {}),
+  ]);
   mark("load");
 
   const fetched = Object.create(null);
-  await client.fetchStates(knownIds, fetched);
-  mark("fetch");
 
   const warnings = new Set();
   const ctx = {
