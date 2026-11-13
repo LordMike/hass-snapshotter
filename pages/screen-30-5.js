@@ -292,7 +292,8 @@ export default function render(hass, { html, mdi, now }) {
       .header-row { position: absolute; left: 0; top: 29px; width: 786px; height: 69px; display: flex; }
       .header-cell { position: relative; height: 69px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
       .clock-cell { width: 230px; border-left: 0; }
-      .clock { position: absolute; left: 22px; top: -4px; font-family: Arial, Helvetica, sans-serif; font-size: 72px; font-weight: 700; line-height: 72px; white-space: nowrap; }
+      .clock { position: absolute; left: 22px; top: -10px; font-family: Arial, Helvetica, sans-serif; font-size: 72px; font-weight: 700; line-height: 72px; white-space: nowrap; }
+      .clock-date { position: absolute; left: 26px; bottom: 0; font-size: 13px; line-height: 14px; white-space: nowrap; }
       .cell-icon { height: 39px; display: flex; align-items: center; justify-content: center; }
       .weather-top { height: 39px; width: 100%; display: flex; align-items: center; justify-content: center; }
       .weather-top svg { margin-right: 16px; }
@@ -307,7 +308,6 @@ export default function render(hass, { html, mdi, now }) {
 
       .calendar-panel { width: 313px; padding-left: 20px; padding-right: 12px; }
       .calendar-title-row { display: flex; justify-content: space-between; align-items: flex-start; }
-      .calendar-date { font-size: 12px; line-height: 12px; white-space: nowrap; }
       .calendar-today { margin-top: 9px; }
       .calendar-today.empty { height: 24px; display: flex; align-items: center; justify-content: center; }
       .calendar-empty { font-size: 13px; line-height: 13px; }
@@ -363,7 +363,7 @@ export default function render(hass, { html, mdi, now }) {
       <div class="dashboard">
         <div class="header">
           <div class="header-row">
-            <div class="header-cell clock-cell"><div class="clock">${clock}</div></div>
+            <div class="header-cell clock-cell"><div class="clock">${clock}</div><div class="clock-date">${todayDateLabel}</div></div>
             <div class="header-cell" style="width: 140px">
               <div class="weather-top">${icon(weatherIcon, 46)}<div class="weather-reading">${weatherTemp}</div></div>
               <div class="weather-label ellipsis">Udendørs</div>
@@ -378,7 +378,6 @@ export default function render(hass, { html, mdi, now }) {
           <div class="panel calendar-panel">
             <div class="calendar-title-row">
               <div class="panel-title narrow">I dag</div>
-              <div class="calendar-date">${todayDateLabel}</div>
             </div>
             <div class="calendar-today ${todayEvents.length === 0 ? "empty" : ""}">
               ${todayEvents.length === 0 ? html`<div class="calendar-empty">ingen aftaler</div>` : ""}
