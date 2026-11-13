@@ -22,10 +22,11 @@ GET /render/<home-assistant path>?viewport=800x480&palette=6c&dither=none
 | `viewport` | `800x480` | Output size, `WIDTHxHEIGHT` |
 | `palette` | none | Map to a panel palette: `bw`, `bwr`, `bwry`, `6c` (white, black, red, yellow, blue, green). Without it the raw screenshot is returned |
 | `dither` | `none` | `none`, `floyd_steinberg`, `burkes`, `atkinson`, `ordered`, ... Pixels that already use a pure ink colour are never dithered |
-| `rotate` | `0` | `0`, `90`, `180`, `270` |
 | `wait` | `0` | Extra milliseconds to wait after the page is ready |
-| `lang` | HA user's | Frontend language, e.g. `en`, `da` |
+| `lang` | HA user's | Frontend language, e.g. `en`, `da`. A language saved in the HA user's profile wins, so set it on the dedicated user instead |
 | `theme`, `dark` | | HA theme name, and `dark` to request dark mode |
+
+Rotation is left to the display (`opendisplay.drawcustom` has `rotate`).
 
 Response headers `X-Render-Timings` (ms per phase) and `X-Render-Browser`
 (`cold`/`warm`) describe the render.
@@ -36,8 +37,16 @@ The path is always resolved against the configured HA URL. Paths with empty,
 `.` or `..` segments, schemes, hosts, ports, `@`, backslashes or encoded
 variants of those are rejected, as are non-dashboard prefixes (`api`, `auth`,
 `local`, ...). `allowed_paths` can restrict rendering further to specific
-prefixes. Inside the browser, top-level navigation away from HA is blocked,
-and the token is only written to HA's own storage.
+prefixes; the endpoint has no authentication of its own, so setting it is
+recommended. A render fails if the page ends up on another origin (e.g. HA
+redirecting http to https), and the token is only written to HA's own storage.
+
+### Speed
+
+Chromium keeps a persistent profile (`/data/chromium-profile` in the app,
+`/tmp/chromium-profile` otherwise), so HA's JavaScript comes from disk cache
+and V8's code cache on later launches. Renders queued back to back share one
+browser launch.
 
 ## Configuration
 
@@ -49,6 +58,7 @@ and the token is only written to HA's own storage.
 | `browser_idle_seconds` | `BROWSER_IDLE_SECONDS` | `0` | Keep the browser this long after a render; `0` closes it at once |
 | `ready_timeout_ms` | `READY_TIMEOUT_MS` | `45000` | Maximum time for a render |
 | | `PORT` | `8080` | |
+| | `TZ` | UTC | Time zone dashboards render in. The HA app gets it from the Supervisor |
 
 ## Local Docker
 

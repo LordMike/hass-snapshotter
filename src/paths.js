@@ -49,9 +49,5 @@ export function resolveRenderPath(rawPath, { haOrigin, allowedPaths }) {
     if (!ok) throw new PathError(403, `Path not in allowed_paths: /${path}`);
   }
 
-  const url = new URL("/" + path, haOrigin);
-  // Belt and braces: the regex above already prevents this.
-  if (url.origin !== haOrigin) throw new PathError(400, "Path resolves outside Home Assistant");
-
-  return { path, url: url.toString() };
+  return { path, url: new URL("/" + path, haOrigin).toString() };
 }

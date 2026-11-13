@@ -1,22 +1,24 @@
-FROM node:24-trixie-slim
+FROM node:24-trixie-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    PUPPETEER_SKIP_DOWNLOAD=true \
-    CHROMIUM_PATH=/usr/bin/chromium-headless-shell \
-    NODE_ENV=production
-
-# chromium-headless-shell is the lightweight headless-only Chromium build.
+# Runtime: Debian's own Node (no npm/yarn) and the headless-only Chromium build.
+FROM debian:trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        nodejs \
         chromium-headless-shell \
         fonts-dejavu-core \
+        fonts-liberation \
         fonts-noto-color-emoji \
         tini \
     && rm -rf /var/lib/apt/lists/*
 
+ENV NODE_ENV=production CHROMIUM_PATH=/usr/bin/chromium-headless-shell
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json ./
 COPY src ./src
 
 EXPOSE 8080
