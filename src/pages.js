@@ -69,11 +69,36 @@ async function loadPage(pagesDir, name) {
     throw fail(500, `${name}.js could not be loaded: ${err.message}${lineOf(err, name)}`);
   });
   if (typeof mod.default !== "function") throw fail(500, `${name}.js must \`export default function render(hass, ctx)\``);
-  const size = mod.size ?? null;
-  if (size && !(Array.isArray(size) && size.length === 2 && size.every((n) => Number.isInteger(n) && n > 0 && n <= 4000))) {
-    throw fail(500, `${name}.js: \`export const size\` must be [width, height] in pixels`);
+  if (mod.params !== undefined && !(Array.isArray(mod.params) && mod.params.every((p) => typeof p === "string"))) {
+    throw fail(500, `${name}.js: \`export const params\` must be a list of parameter names`);
   }
   return mod;
+}
+
+// The page's size: `export const size = [w, h]`, or a function of the URL
+// parameters returning one. Default 800x480.
+function pageSize(page, name, params) {
+  let size = page.size ?? [800, 480];
+  if (typeof size === "function") {
+    try {
+      size = size(params);
+    } catch (err) {
+      throw fail(400, `${name}.js size(params) failed${lineOf(err, name)}: ${err.message}`);
+    }
+  }
+  if (!(Array.isArray(size) && size.length === 2 && size.every((n) => Number.isInteger(n) && n > 0 && n <= 4000))) {
+    throw fail(500, `${name}.js: size must be [width, height] in whole pixels up to 4000`);
+  }
+  return size;
+}
+
+// A page that declares `export const params = [...]` gets typos rejected.
+function checkParams(page, name, params) {
+  if (!page.params) return;
+  const unknown = Object.keys(params).filter((k) => !page.params.includes(k));
+  if (unknown.length) {
+    throw fail(400, `${name} does not take parameter ${unknown.map((k) => `"${k}"`).join(", ")}; it takes: ${page.params.join(", ") || "none"} (and palette)`);
+  }
 }
 
 // " (line N)" from an error's stack, for the page file.
@@ -87,7 +112,7 @@ function lineOf(err, name) {
  * @param {"png"|"html"} format "html" returns the markup instead of an image
  * @returns {Promise<{png?: Buffer, markup?: string, timings: Record<string, number>, ids: string[], warnings: string[]}>}
  */
-export async function renderPageModule({ pagesDir, client }, name, { palette, format }) {
+export async function renderPageModule({ pagesDir, client }, name, { palette, format, params = {} }) {
   const timings = {};
   let last = Date.now();
   const mark = (k) => {
@@ -97,6 +122,8 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   };
 
   const page = await loadPage(pagesDir, name);
+  checkParams(page, name, params);
+  const [w, h] = pageSize(page, name, params);
   // States are fetched in parallel with loading the renderer and fonts.
   const [r, config] = await Promise.all([
     format === "html" ? null : getRenderer(pagesDir),
@@ -115,6 +142,8 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
     now: new Date(),
     timeZone: config.time_zone,
     locale: config.language,
+    params: Object.freeze({ ...params }),
+    size: [w, h],
   };
   let markup;
   let read;
@@ -148,7 +177,6 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   const result = { timings, ids: [...read], warnings: [...warnings] };
   if (format === "html") return { ...result, markup };
 
-  const [w, h] = page.size ?? [800, 480];
   if (!palette) {
     result.png = await r.render(markup, { width: w, height: h });
     mark("render");

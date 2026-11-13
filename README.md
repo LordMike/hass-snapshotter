@@ -38,9 +38,9 @@ other hosts use `http://<ha-host>:10010`.
 ## Pages
 
 ```js
-export const size = [800, 480]; // optional, default 800x480
+export const size = [800, 480]; // optional, default 800x480; may be a function of URL parameters
 
-export default function render(hass, { html, raw, mdi, now, timeZone, locale }) {
+export default function render(hass, { html, raw, mdi, now, timeZone, locale, params, size }) {
   const temp = hass.states["sensor.outdoor_temperature"];
   return html`
     <style>.big { font-size: 64px; display: flex; align-items: center; background: #fff; }</style>
@@ -68,6 +68,27 @@ export default function render(hass, { html, raw, mdi, now, timeZone, locale }) 
 
 `pages/screen-21-5.js` and `pages/screen-30-5.js` are complete examples.
 
+### URL parameters
+
+Every query parameter except `palette` is passed to the page as
+`ctx.params` (strings), so one page can serve several displays or rooms.
+`size` can be a function of them, and `ctx.size` is the size in use:
+
+```js
+// /page/room?entity=sensor.bath_temperature&label=Bad&size=small&palette=bw
+export const params = ["entity", "label", "size"]; // optional: rejects typos with a 400
+export const size = ({ size }) => (size === "small" ? [296, 128] : [800, 480]);
+
+export default function render(hass, { html, params, size }) {
+  const s = hass.states[params.entity ?? "sun.sun"];
+  return html`<div style="width:${size[0]}px">${params.label ?? "State"}: ${s?.state ?? "--"}</div>`;
+}
+```
+
+Parameter values come from the URL: interpolate them through `html` (which
+escapes them) and not into `style="..."` or `raw()`. Names are limited to
+letters, digits, `-` and `_`; at most 20 parameters of up to 500 characters.
+
 ## Endpoints
 
 | | |
@@ -75,6 +96,7 @@ export default function render(hass, { html, raw, mdi, now, timeZone, locale }) 
 | `GET /` | Lists pages with preview links |
 | `GET /page/<name>` | Full-colour PNG |
 | `GET /page/<name>?palette=6c` | PNG on a panel palette: `bw`, `bwr`, `bwry`, `6c` (white, black, red, yellow, blue, green). Colours snap to the nearest ink; anti-aliased edges become black, white or a neighbouring ink, so text never gains coloured fringes. No dithering |
+| `GET /page/<name>?key=value` | Any other parameter goes to the page as `ctx.params` (see URL parameters) |
 | `GET /page/<name>.html` | The page's markup, for debugging layout in a browser |
 | `GET /healthz` | `ok` |
 

@@ -15,11 +15,20 @@ let haConfigAt = 0;
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
+// `palette` is the server's own; every other query parameter is passed to the
+// page as ctx.params (strings, last value wins).
 function parseParams(q) {
-  for (const k of q.keys()) if (k !== "palette") throw fail(400, `Unknown parameter "${k}"; the only parameter is palette`);
   const palette = q.get("palette") ?? undefined;
   if (palette !== undefined && !(palette in PALETTES)) throw fail(400, `palette must be one of ${Object.keys(PALETTES).join(", ")}`);
-  return { palette };
+  const params = {};
+  for (const [k, v] of q) {
+    if (k === "palette") continue;
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) throw fail(400, `Parameter name "${k}" not allowed: use letters, digits, - and _`);
+    if (v.length > 500) throw fail(400, `Parameter ${k} is longer than 500 characters`);
+    params[k] = v;
+  }
+  if (Object.keys(params).length > 20) throw fail(400, "At most 20 parameters");
+  return { palette, params };
 }
 
 // Each render runs in a child process that exits afterwards, so the renderer,
