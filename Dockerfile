@@ -29,5 +29,8 @@ LABEL \
   org.opencontainers.image.source="https://github.com/LordMike/hass-snapshotter"
 
 EXPOSE 8080
+# The Supervisor uses this instead of a watchdog URL. busybox wget is in Alpine.
+HEALTHCHECK --interval=1m --timeout=5s --start-period=10s \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
 # Node runs as PID 1: it handles SIGTERM itself and reaps the render children it forks.
 CMD ["node", "src/server.js"]
