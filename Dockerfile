@@ -6,7 +6,9 @@ FROM alpine:3.23
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN apk add --no-cache nodejs icu-data-full \
+RUN apk add --no-cache nodejs icu-data-full font-liberation font-liberation-sans-narrow \
+    # Pages get these as Arial / Helvetica / Arial Narrow; only regular and bold are registered.
+    && rm -f /usr/share/fonts/liberation*/*Italic.ttf /usr/share/fonts/liberation/LiberationMono* /usr/share/fonts/liberation/LiberationSerif* \
     && apk add --no-cache --virtual .build npm \
     && npm ci --omit=dev --no-audit --no-fund \
     && cd node_modules \

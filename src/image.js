@@ -35,11 +35,17 @@ export function applyPalette(rgba, width, height, name) {
   return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
 }
 
+// An edge pixel joins the stroke from about 30% coverage instead of 50%, so
+// thin text keeps its strokes: the background ink's squared distance is
+// weighted by 5 (stroke wins when (1-c) < 2.24c).
+const BACKGROUND_WEIGHT = 5;
+
 /**
  * Pixels that are exactly an ink keep it. Anti-aliased edges (pixels within
  * 2 px of an exact ink) take the nearest of black, white and those inks, so
- * black text on yellow never gains red fringes. Other colours take the
- * nearest ink overall.
+ * black text on yellow never gains red fringes; the most common nearby ink is
+ * taken as the background and counts as further away, so thin strokes survive.
+ * Other colours take the nearest ink overall.
  */
 function mapToInks(data, width, height, inks) {
   const n = width * height;
@@ -50,7 +56,7 @@ function mapToInks(data, width, height, inks) {
   for (let p = 0; p < n; p++) exact[p] = inkOf.get(key(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])) ?? -1;
   const baseMask = (1 << inkOf.get(key(0, 0, 0))) | (1 << inkOf.get(key(255, 255, 255)));
 
-  const nearest = (p, mask) => {
+  const nearest = (p, mask, background = -1) => {
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < inks.length; i++) {
@@ -58,11 +64,12 @@ function mapToInks(data, width, height, inks) {
       const dr = data[p * 4] - inks[i][0];
       const dg = data[p * 4 + 1] - inks[i][1];
       const db = data[p * 4 + 2] - inks[i][2];
-      const d = dr * dr + dg * dg + db * db;
+      const d = (dr * dr + dg * dg + db * db) * (i === background ? BACKGROUND_WEIGHT : 1);
       if (d < bestDist) [best, bestDist] = [i, d];
     }
     return best;
   };
+  const counts = new Uint16Array(inks.length);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -73,16 +80,20 @@ function mapToInks(data, width, height, inks) {
       }
       let mask = baseMask;
       let edge = false;
+      counts.fill(0);
       for (let yy = Math.max(0, y - 2); yy <= Math.min(height - 1, y + 2); yy++) {
         for (let xx = Math.max(0, x - 2); xx <= Math.min(width - 1, x + 2); xx++) {
           const e = exact[yy * width + xx];
           if (e >= 0) {
             mask |= 1 << e;
+            counts[e]++;
             edge = true;
           }
         }
       }
-      out[p] = nearest(p, edge ? mask : 0);
+      let background = -1;
+      for (let i = 0, max = 0; i < inks.length; i++) if (counts[i] > max) [background, max] = [i, counts[i]];
+      out[p] = edge ? nearest(p, mask, background) : nearest(p, 0);
     }
   }
   return out;

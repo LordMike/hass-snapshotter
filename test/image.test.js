@@ -38,6 +38,16 @@ test("solid off-palette colours take the nearest ink", () => {
   assert.ok(out.every(([r, g, b]) => r === 255 && b === 0 && (g === 0 || g === 255)), JSON.stringify(out[12]));
 });
 
+test("thin strokes keep partly covered edge pixels", () => {
+  const white = [255, 255, 255, 255];
+  const black = [0, 0, 0, 255];
+  const third = [170, 170, 170, 255]; // ~1/3 black coverage on white
+  const sixth = [213, 213, 213, 255]; // ~1/6 coverage: stays background
+  const out = decode(applyPalette(image([white, white, white, sixth, third, black]), 6, 1, "6c"));
+  assert.deepEqual(out[4], [0, 0, 0]);
+  assert.deepEqual(out[3], [255, 255, 255]);
+});
+
 test("anti-aliased black-on-yellow edges never become red", () => {
   const yellow = [255, 255, 0, 255];
   const black = [0, 0, 0, 255];

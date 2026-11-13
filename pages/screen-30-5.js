@@ -252,17 +252,17 @@ export default function render(hass, { html, mdi, now }) {
 
   return html`
     <style>
-      .screen { position: relative; width: 800px; height: 480px; overflow: hidden; background: #fff; color: #000; font-family: Roboto; }
+      .screen { position: relative; width: 800px; height: 480px; overflow: hidden; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
       .dashboard { position: absolute; left: 0; top: 0; width: ${DESIGN_WIDTH}px; height: ${DESIGN_HEIGHT}px; overflow: hidden; background: #fff;
         transform: scale(${800 / DESIGN_WIDTH}, ${480 / DESIGN_HEIGHT}); transform-origin: 0 0; }
       .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .narrow { font-weight: 700; letter-spacing: -0.5px; }
+      .narrow { font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-weight: 700; }
 
       .header { position: absolute; left: 8px; top: 0; width: 944px; height: 163px; border-bottom: 1px solid #000; overflow: hidden; }
       .header-row { position: absolute; left: 0; top: 41px; width: 944px; height: 98px; display: flex; }
       .header-cell { position: relative; height: 98px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
       .clock-cell { width: 314px; border-left: 0; }
-      .clock { position: absolute; left: 24px; top: -16px; font-size: 114px; font-weight: 700; line-height: 114px; letter-spacing: -5px; white-space: nowrap; }
+      .clock { position: absolute; left: 26px; top: -6px; font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-size: 104px; font-weight: 700; line-height: 104px; white-space: nowrap; }
       .cell-icon { height: 55px; display: flex; align-items: center; justify-content: center; }
       .weather-top { height: 55px; width: 100%; display: flex; align-items: center; justify-content: center; }
       .weather-top svg { margin-right: 22px; }

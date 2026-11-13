@@ -20,9 +20,22 @@ export function listPages(pagesDir) {
     .sort();
 }
 
+// Metric-compatible stand-ins for the usual web fonts (installed in the image),
+// registered under the names pages ask for, as browsers do through fontconfig.
+const SYSTEM_FONTS = [
+  { file: "/usr/share/fonts/liberation/LiberationSans-Regular.ttf", names: ["Arial", "Helvetica", "Liberation Sans", "sans-serif"] },
+  { file: "/usr/share/fonts/liberation/LiberationSans-Bold.ttf", names: ["Arial", "Helvetica", "Liberation Sans", "sans-serif"] },
+  { file: "/usr/share/fonts/liberation-sans-narrow/LiberationSansNarrow-Regular.ttf", names: ["Arial Narrow", "Liberation Sans Narrow"] },
+  { file: "/usr/share/fonts/liberation-sans-narrow/LiberationSansNarrow-Bold.ttf", names: ["Arial Narrow", "Liberation Sans Narrow"] },
+];
+
 async function getRenderer(pagesDir) {
   const { Renderer } = await import("@takumi-rs/core");
   const renderer = new Renderer();
+  const system = SYSTEM_FONTS.filter((f) => existsSync(f.file)).flatMap(({ file, names }) => {
+    const data = readFileSync(file);
+    return names.map((name) => renderer.registerFont({ name, data }));
+  });
   const roboto = join(require.resolve("@fontsource/roboto/package.json"), "..", "files");
   const fonts = [400, 500, 700].flatMap((w) => ["latin", "latin-ext"].map((s) => join(roboto, `roboto-${s}-${w}-normal.woff2`)));
   // Extra fonts dropped next to the pages.
@@ -32,13 +45,14 @@ async function getRenderer(pagesDir) {
       if ([".ttf", ".otf", ".woff", ".woff2"].includes(extname(f))) fonts.push(join(fontsDir, f));
     }
   }
-  await Promise.all(
-    fonts.map((f) =>
+  await Promise.all([
+    ...system,
+    ...fonts.map((f) =>
       renderer.registerFont(readFileSync(f)).catch((err) => {
         throw fail(500, `Font ${f} could not be loaded: ${err.message}`);
       }),
     ),
-  );
+  ]);
   return renderer;
 }
 
