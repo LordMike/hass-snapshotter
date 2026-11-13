@@ -220,42 +220,34 @@ export default function render(hass, { html, raw, now }) {
 
 // --- formatting helpers (Europe/Copenhagen, Danish) ---
 
-function parts(date, options) {
-  const p = new Intl.DateTimeFormat("da-DK", { timeZone: TZ, ...options }).formatToParts(date);
-  return (type) => p.find((x) => x.type === type)?.value || "";
-}
+// Formatters are created once; building one per call dominated template time.
+const dtf = (options) => new Intl.DateTimeFormat("da-DK", { timeZone: TZ, ...options });
+const PARTS = dtf({ year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const PAGE_DATE = dtf({ weekday: "long", day: "numeric", month: "long" });
+const WEEKDAY_SHORT = dtf({ weekday: "short" });
+const TIME = dtf({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const TIME_SECONDS = dtf({ hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
 
+const local = (date) => Object.fromEntries(PARTS.formatToParts(date).map((p) => [p.type, p.value]));
 function localDateKey(date) {
-  const get = new Intl.DateTimeFormat("sv-SE", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-  const v = (t) => get.find((x) => x.type === t)?.value || "";
-  return `${v("year")}-${v("month")}-${v("day")}`;
+  const p = local(date);
+  return `${p.year}-${p.month}-${p.day}`;
 }
-
-const localHour = (date) => Number(parts(date, { hour: "2-digit", hourCycle: "h23" })("hour"));
-const localMinute = (date) => Number(parts(date, { minute: "2-digit" })("minute"));
+const localHour = (date) => Number(local(date).hour);
+const localMinute = (date) => Number(local(date).minute);
 
 function formatDanishPageDate(date) {
-  const get = parts(date, { weekday: "long", day: "numeric", month: "long" });
-  const weekday = get("weekday");
-  return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)} ${get("day")}. ${get("month")}`;
+  const p = Object.fromEntries(PAGE_DATE.formatToParts(date).map((x) => [x.type, x.value]));
+  return `${p.weekday.charAt(0).toUpperCase() + p.weekday.slice(1)} ${p.day}. ${p.month}`;
 }
 
-const localWeekdayShort = (date) =>
-  new Intl.DateTimeFormat("da-DK", { timeZone: TZ, weekday: "short" }).format(date).replace(".", "").toLowerCase();
-
-function formatTime(date, seconds) {
-  return new Intl.DateTimeFormat("da-DK", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    ...(seconds && { second: "2-digit" }),
-  }).format(date);
-}
+const localWeekdayShort = (date) => WEEKDAY_SHORT.format(date).replace(".", "").toLowerCase();
+const formatTime = (date, seconds) => (seconds ? TIME_SECONDS : TIME).format(date);
 
 function formatInputDateTime(s) {
   if (!s) return "--:--";
-  const ts = asNumber(s.attributes?.timestamp, NaN);
+  // For a time-only input_datetime, `timestamp` is seconds since midnight, not an instant.
+  const ts = s.attributes?.has_date === false ? NaN : asNumber(s.attributes?.timestamp, NaN);
   if (Number.isFinite(ts)) return formatTime(new Date(ts * 1000), false);
   const m = /(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(s.state || "");
   return m ? `${pad2(m[1])}:${pad2(m[2])}` : "--:--";

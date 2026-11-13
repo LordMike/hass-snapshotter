@@ -1,5 +1,5 @@
 name: ha-snapshotter
-version: "0.2.0"
+version: "0.3.0"
 slug: ha_snapshotter
 description: Render Home Assistant data to PNG images for e-paper displays, without a browser
 arch:
@@ -8,18 +8,21 @@ arch:
 init: false
 startup: application
 boot: auto
-# Pages live in this app's config folder: /addon_configs/<slug>/pages/<name>.js
+# Talks to Core through the Supervisor: no long-lived token needed.
+homeassistant_api: true
+# Pages are read from Home Assistant's config folder (/homeassistant inside the app).
 map:
-  - addon_config:rw
+  - homeassistant_config:ro
 ports:
   8080/tcp: 10010
 ports_description:
-  8080/tcp: Render endpoint (/page/<name>)
+  8080/tcp: Render endpoint for browsers and other hosts. HA itself can use http://local-ha-snapshotter:8080
+watchdog: http://[HOST]:[PORT:8080]/healthz
 options:
-  ha_url: "http://homeassistant:8123"
-  ha_token: ""
+  pages_dir: /homeassistant/dashboard-pages
   render_timeout_ms: 30000
 schema:
-  ha_url: url
-  ha_token: password
+  pages_dir: str
   render_timeout_ms: int(1000,120000)
+  ha_url: url?
+  ha_token: password?

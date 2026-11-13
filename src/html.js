@@ -1,14 +1,14 @@
 // Tagged template for page markup. Interpolated values are escaped; arrays are
-// joined; values from html`` or raw() pass through unescaped.
+// joined; values from html`` or raw() pass through unescaped. Escaping covers
+// text and quoted attributes, not CSS: don't interpolate untrusted values into
+// style="...".
 
-const SAFE = Symbol("safe");
-
-class Safe {
+export class Safe {
   constructor(value) {
-    this[SAFE] = value;
+    this.value = value;
   }
   toString() {
-    return this[SAFE];
+    return this.value;
   }
 }
 
@@ -17,7 +17,7 @@ const escape = (s) =>
 
 function stringify(value) {
   if (value === null || value === undefined || value === false) return "";
-  if (value instanceof Safe) return value[SAFE];
+  if (value instanceof Safe) return value.value;
   if (Array.isArray(value)) return value.map(stringify).join("");
   return escape(value);
 }

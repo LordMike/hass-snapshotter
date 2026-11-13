@@ -1,11 +1,11 @@
 {
   "name": "ha-snapshotter",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Render Home Assistant data to PNG images for e-paper displays, without a browser.",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.2"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -14,7 +14,6 @@
   "dependencies": {
     "@fontsource/roboto": "^5.3.0",
     "@mdi/js": "^7.4.47",
-    "@opendisplay/epaper-dithering": "^7.0.0",
     "@takumi-rs/core": "^2.20.0"
   }
 }

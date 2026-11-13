@@ -3,13 +3,14 @@
 import { HassClient } from "./hass.js";
 import { renderPageModule } from "./pages.js";
 
-process.once("message", async ({ config, name, params, knownIds, haConfig }) => {
+process.once("message", async ({ config, name, params, knownIds, haConfig, haConfigAt }) => {
+  const client = new HassClient(config);
+  if (haConfig) Object.assign(client, { config: haConfig, configFetched: haConfigAt });
   try {
-    const client = new HassClient(config);
-    if (haConfig) client.config = haConfig;
     const result = await renderPageModule({ pagesDir: config.pagesDir, client }, name, params, knownIds);
-    process.send({ ok: true, ...result, haConfig: client.config }, () => process.exit(0));
+    process.send({ ok: true, ...result, haConfig: client.config, haConfigAt: client.configFetched }, () => process.exit(0));
   } catch (err) {
+    if (!err.status) console.error(err.stack); // unexpected: keep the trace in the log
     process.send({ ok: false, status: err.status ?? 500, message: err.message }, () => process.exit(0));
   }
 });

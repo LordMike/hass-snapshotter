@@ -2,69 +2,93 @@
 // Takumi (a Rust HTML/CSS renderer) turns the HTML into a PNG.
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join, extname } from "node:path";
+import { join, extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { html, raw } from "./html.js";
+import { html, raw, Safe } from "./html.js";
 import { recordingStates } from "./hass.js";
 
-const NAME = /^[a-z0-9][a-z0-9_-]*$/;
+export const NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const MAX_PASSES = 4;
+const require = createRequire(import.meta.url);
+const fail = (status, message) => Object.assign(new Error(message), { status });
 
-let renderer = null;
+export function listPages(pagesDir) {
+  if (!existsSync(pagesDir)) return [];
+  return readdirSync(pagesDir)
+    .filter((f) => f.endsWith(".js") && NAME.test(f.slice(0, -3)))
+    .map((f) => f.slice(0, -3))
+    .sort();
+}
 
 async function getRenderer(pagesDir) {
-  if (renderer) return renderer;
   const { Renderer } = await import("@takumi-rs/core");
-  renderer = new Renderer();
-  const require = createRequire(import.meta.url);
+  const renderer = new Renderer();
   const roboto = join(require.resolve("@fontsource/roboto/package.json"), "..", "files");
-  for (const weight of [400, 500, 700]) {
-    for (const subset of ["latin", "latin-ext"]) {
-      await renderer.registerFont(readFileSync(join(roboto, `roboto-${subset}-${weight}-normal.woff2`)));
-    }
-  }
+  const fonts = [400, 500, 700].flatMap((w) => ["latin", "latin-ext"].map((s) => join(roboto, `roboto-${s}-${w}-normal.woff2`)));
   // Extra fonts dropped next to the pages.
   const fontsDir = join(pagesDir, "fonts");
   if (existsSync(fontsDir)) {
     for (const f of readdirSync(fontsDir)) {
-      if ([".ttf", ".otf", ".woff", ".woff2"].includes(extname(f))) await renderer.registerFont(readFileSync(join(fontsDir, f)));
+      if ([".ttf", ".otf", ".woff", ".woff2"].includes(extname(f))) fonts.push(join(fontsDir, f));
     }
   }
+  await Promise.all(
+    fonts.map((f) =>
+      renderer.registerFont(readFileSync(f)).catch((err) => {
+        throw fail(500, `Font ${f} could not be loaded: ${err.message}`);
+      }),
+    ),
+  );
   return renderer;
 }
 
-let mdiPaths = null;
-async function loadMdi() {
-  mdiPaths ??= await import("@mdi/js");
-  return mdiPaths;
-}
-
-// mdi("mdi:weather-cloudy", { size: 48, color: "#000" }) -> inline SVG
-function mdiHelper(paths) {
+// mdi("mdi:weather-cloudy", { size: 48, color: "#000" }) -> inline SVG.
+// The icon set (2.8 MB) is only loaded if a page uses an icon.
+function mdiHelper(warnings) {
+  let paths = null;
   return (name, { size = 24, color = "currentColor" } = {}) => {
-    const key = "mdi" + name.replace(/^mdi:/, "").replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
+    paths ??= require("@mdi/js");
+    const key = "mdi" + String(name).replace(/^mdi:/, "").replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
     const d = paths[key];
-    if (!d) return raw("");
+    if (!d) {
+      warnings.add(`unknown icon ${name}`);
+      return raw("");
+    }
     return raw(`<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${color}" d="${d}"/></svg>`);
   };
 }
 
 async function loadPage(pagesDir, name) {
-  if (!NAME.test(name)) throw Object.assign(new Error(`Page name not allowed: ${name}`), { status: 400 });
-  const file = join(pagesDir, `${name}.js`);
-  if (!existsSync(file)) throw Object.assign(new Error(`No page ${name}.js in ${pagesDir}`), { status: 404 });
+  const file = resolve(pagesDir, `${name}.js`);
+  if (!existsSync(file)) {
+    const available = listPages(pagesDir);
+    throw fail(404, `No page ${name}.js in ${pagesDir}. Available: ${available.join(", ") || "none"}`);
+  }
   // Cache-bust on change so edited pages are picked up without a restart.
-  const mod = await import(`${pathToFileURL(file).href}?v=${statSync(file).mtimeMs}`);
-  if (typeof mod.default !== "function") throw Object.assign(new Error(`${name}.js has no default export`), { status: 500 });
+  const mod = await import(`${pathToFileURL(file).href}?v=${statSync(file).mtimeMs}`).catch((err) => {
+    throw fail(500, `${name}.js could not be loaded: ${err.message}${lineOf(err, name)}`);
+  });
+  if (typeof mod.default !== "function") throw fail(500, `${name}.js must \`export default function render(hass, ctx)\``);
+  const size = mod.size ?? null;
+  if (size && !(Array.isArray(size) && size.length === 2 && size.every((n) => Number.isInteger(n) && n > 0 && n <= 4000))) {
+    throw fail(500, `${name}.js: \`export const size\` must be [width, height] in pixels`);
+  }
   return mod;
 }
 
+// " (line N)" from an error's stack, for the page file.
+function lineOf(err, name) {
+  const m = new RegExp(`${name}\\.js(?:\\?[^:]*)?:(\\d+)`).exec(err?.stack ?? "");
+  return m ? ` (line ${m[1]})` : "";
+}
+
 /**
- * Renders a page module to PNG.
+ * Renders a page module.
  * @param {string[]} knownIds entities the page read last time, fetched up front
- * @returns {Promise<{png: Buffer, timings: Record<string, number>, ids: string[]}>}
+ * @param {"png"|"html"} format "html" returns the markup instead of an image
+ * @returns {Promise<{png?: Buffer, markup?: string, timings: Record<string, number>, ids: string[], warnings: string[]}>}
  */
-export async function renderPageModule({ pagesDir, client }, name, { width, height, palette, dither }, knownIds = []) {
+export async function renderPageModule({ pagesDir, client }, name, { palette, format }, knownIds = []) {
   const timings = {};
   let last = Date.now();
   const mark = (k) => {
@@ -74,42 +98,64 @@ export async function renderPageModule({ pagesDir, client }, name, { width, heig
   };
 
   const page = await loadPage(pagesDir, name);
-  const [r, paths, config] = await Promise.all([getRenderer(pagesDir), loadMdi(), client.getConfig()]);
+  const [r, config] = await Promise.all([format === "html" ? null : getRenderer(pagesDir), client.getConfig()]);
   mark("load");
 
-  const fetched = {};
+  const fetched = Object.create(null);
   await client.fetchStates(knownIds, fetched);
   mark("fetch");
 
-  const ctx = { html, raw, mdi: mdiHelper(paths), now: new Date(), timeZone: config.time_zone };
+  const warnings = new Set();
+  const ctx = {
+    html,
+    raw,
+    mdi: mdiHelper(warnings),
+    now: new Date(),
+    timeZone: config.time_zone,
+    locale: config.language,
+  };
   let markup;
+  let read;
   for (let pass = 1; ; pass++) {
     const missing = new Set();
-    const hass = { states: recordingStates(fetched, missing), config, language: config.language };
+    read = new Set();
+    const hass = { states: recordingStates(fetched, missing, read), config, language: config.language };
     let error = null;
     try {
-      markup = String(page.default(hass, ctx));
+      const out = await page.default(hass, ctx);
+      if (typeof out !== "string" && !(out instanceof Safe)) {
+        throw new Error(`render() returned ${out === undefined ? "nothing (missing return?)" : typeof out}; return an html\`...\` string`);
+      }
+      markup = String(out);
     } catch (err) {
       error = err; // often just data that isn't fetched yet
     }
     mark("template");
-    if (missing.size === 0 || pass === MAX_PASSES) {
-      if (error) throw error;
+    if (missing.size === 0) {
+      if (error) {
+        const unknown = [...read].filter((id) => fetched[id] === null);
+        throw fail(500, `${name}.js${lineOf(error, name)}: ${error.message}` + (unknown.length ? ` (entities not found in HA: ${unknown.join(", ")})` : ""));
+      }
       break;
     }
+    if (pass === MAX_PASSES) throw fail(500, `${name}.js still reads new entities after ${MAX_PASSES} passes: ${[...missing].join(", ")}`);
     await client.fetchStates(missing, fetched);
     mark("fetch");
   }
-  const [w, h] = page.size ?? [width, height];
+  for (const id of read) if (fetched[id] === null) warnings.add(`entity not found: ${id}`);
+  const result = { timings, ids: [...read], warnings: [...warnings] };
+  if (format === "html") return { ...result, markup };
+
+  const [w, h] = page.size ?? [800, 480];
   if (!palette) {
-    const png = await r.render(markup, { width: w, height: h });
+    result.png = await r.render(markup, { width: w, height: h });
     mark("render");
-    return { png, timings, ids: Object.keys(fetched) };
+    return result;
   }
   const rgba = await r.render(markup, { width: w, height: h, format: "raw" });
   mark("render");
   const { applyPalette } = await import("./image.js");
-  const png = applyPalette(rgba, w, h, palette, dither);
+  result.png = applyPalette(rgba, w, h, palette);
   mark("palette");
-  return { png, timings, ids: Object.keys(fetched) };
+  return result;
 }

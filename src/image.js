@@ -1,6 +1,5 @@
-// Maps rendered RGBA pixels onto a panel palette and writes an indexed PNG.
+// Maps rendered RGBA pixels onto an e-paper panel's inks and writes an indexed PNG.
 import { deflateSync, crc32 } from "node:zlib";
-import { ditherImage, Palette } from "@opendisplay/epaper-dithering";
 
 const INKS = {
   white: [255, 255, 255],
@@ -18,46 +17,31 @@ export const PALETTES = {
   "6c": ["white", "black", "red", "yellow", "blue", "green"],
 };
 
-const hex = (rgb) => "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
-const built = new Map();
-
-// Each ink is named with its exact nominal colour, so pixels that already use
-// it stay solid and undithered.
-function palette(name) {
-  if (!built.has(name)) {
-    const inks = PALETTES[name].map((ink) => INKS[ink]);
-    const pal = Palette.fromSrgb(
-      PALETTES[name].map((ink, i) => {
-        const [r, g, b] = inks[i];
-        return { rgb: { r, g, b }, name: ink, nominal: hex(inks[i]) };
-      }),
-    );
-    built.set(name, { inks, pal });
+/**
+ * Maps RGBA pixels onto a panel palette and returns an indexed PNG whose
+ * pixels are the pure ink colours, so the display can map them 1:1.
+ * No dithering: pages are flat UI, drawn in the panel's colours.
+ */
+export function applyPalette(rgba, width, height, name) {
+  const inks = PALETTES[name].map((ink) => INKS[ink]);
+  // Takumi's raw output is straight RGBA; flatten transparency onto white
+  // (a page without a background is transparent, which would read as black).
+  for (let i = 3; i < rgba.length; i += 4) {
+    const a = rgba[i];
+    if (a === 255) continue;
+    for (let c = i - 3; c < i; c++) rgba[c] = Math.round((rgba[c] * a + 255 * (255 - a)) / 255);
+    rgba[i] = 255;
   }
-  return built.get(name);
+  return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
 }
 
 /**
- * Maps RGBA pixels onto a panel palette and returns an indexed PNG. Output
- * pixels are the pure ink colours (not preview colours), so the display can
- * map them 1:1.
+ * Pixels that are exactly an ink keep it. Anti-aliased edges (pixels within
+ * 2 px of an exact ink) take the nearest of black, white and those inks, so
+ * black text on yellow never gains red fringes. Other colours take the
+ * nearest ink overall.
  */
-export function applyPalette(rgba, width, height, name, dither) {
-  const { inks, pal } = palette(name);
-  if (dither === "none") return indexedPng(mapToNeighbourInks(rgba, width, height, inks), width, height, inks);
-
-  const pixels = new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.length);
-  const { indices } = ditherImage({ width, height, data: pixels }, pal, { mode: dither });
-  return indexedPng(indices, width, height, inks);
-}
-
-/**
- * Mapping without dithering, for UI-like pages. Pixels that are exactly an ink
- * keep it. Any other pixel (anti-aliased edges) takes the nearest of black,
- * white and the exact inks within 2 px, so black text on yellow never gains
- * red fringes.
- */
-function mapToNeighbourInks(data, width, height, inks) {
+function mapToInks(data, width, height, inks) {
   const n = width * height;
   const out = new Uint8Array(n);
   const exact = new Int8Array(n).fill(-1);
@@ -87,15 +71,18 @@ function mapToNeighbourInks(data, width, height, inks) {
         out[p] = exact[p];
         continue;
       }
-      // Black and white are always candidates: thin text may have no exact-ink core.
       let mask = baseMask;
+      let edge = false;
       for (let yy = Math.max(0, y - 2); yy <= Math.min(height - 1, y + 2); yy++) {
         for (let xx = Math.max(0, x - 2); xx <= Math.min(width - 1, x + 2); xx++) {
           const e = exact[yy * width + xx];
-          if (e >= 0) mask |= 1 << e;
+          if (e >= 0) {
+            mask |= 1 << e;
+            edge = true;
+          }
         }
       }
-      out[p] = nearest(p, mask);
+      out[p] = nearest(p, edge ? mask : 0);
     }
   }
   return out;
@@ -123,7 +110,7 @@ function indexedPng(indices, width, height, inks) {
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
     chunk("PLTE", Buffer.from(inks.flat())),
-    chunk("IDAT", deflateSync(rows, { level: 9 })),
+    chunk("IDAT", deflateSync(rows)),
     chunk("IEND", Buffer.alloc(0)),
   ]);
 }
