@@ -91,8 +91,8 @@ Assistant unreachable or rejecting the token, 503 not configured or busy,
 |---|---|---|---|
 | `pages_dir` | `PAGES_DIR` | `/homeassistant/dashboard-pages` (app), `./pages` | Folder with pages |
 | `render_timeout_ms` | `RENDER_TIMEOUT_MS` | `30000` | Maximum time for one render |
-| `ha_url` | `HA_URL` | Supervisor (app) | Home Assistant base URL; required outside the app |
-| `ha_token` | `HA_TOKEN` | Supervisor (app) | Long-lived access token; required outside the app |
+| `ha_url` | `HA_URL` | Supervisor (app) | **Optional in the HA app**: leave empty to use the built-in connection. Required for standalone Docker: Home Assistant base URL |
+| `ha_token` | `HA_TOKEN` | Supervisor (app) | **Optional in the HA app**: leave empty, no token needed. Required for standalone Docker: long-lived access token |
 
 ## Standalone Docker
 
