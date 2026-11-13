@@ -98,7 +98,7 @@ Assistant unreachable or rejecting the token, 503 not configured or busy,
 
 ```
 docker build -t ha-snapshotter .
-docker run -p 8080:8080 -e HA_URL=https://ha.example.com -e HA_TOKEN=... ha-snapshotter
+docker run -p 8080:8080 -v "$PWD/pages:/app/pages:ro" -e HA_URL=https://ha.example.com -e HA_TOKEN=... ha-snapshotter
 ```
 
 ## Development

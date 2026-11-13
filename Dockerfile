@@ -18,8 +18,6 @@ RUN apk add --no-cache nodejs icu-data-full \
     && apk del .build \
     && rm -rf /root/.npm /tmp/*
 COPY src ./src
-# Example pages for standalone Docker. The app reads pages from pages_dir.
-COPY pages ./pages
 
 EXPOSE 8080
 # Node runs as PID 1: it handles SIGTERM itself and reaps the render children it forks.
