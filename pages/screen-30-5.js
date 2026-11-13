@@ -105,9 +105,30 @@ export default function render(hass, { html, mdi, now }) {
   };
   const activeGroupMembers = (groupId) => expandGroupMembers(groupId).filter((id) => stateOf(id) === "on");
   const openContacts = activeGroupMembers("binary_sensor.all_doors_windows");
-  const openDoors = buildAreaStatusLines(openContacts.filter(isDoor));
-  const openWindows = buildAreaStatusLines(openContacts.filter(isWindow));
+  // Doors and windows share one cell; open doors are listed first and pick the icon.
+  const doorsOpen = openContacts.filter(isDoor);
+  const windowsOpen = openContacts.filter((id) => isWindow(id) && !isDoor(id));
+  const openings = buildAreaStatusLines([...doorsOpen, ...windowsOpen]);
+  const openingsIcon = doorsOpen.length ? "mdi:door-open" : windowsOpen.length ? "mdi:window-open" : "mdi:door-closed";
   const onLights = buildAreaStatusLines(activeGroupMembers("light.all_lights"));
+
+  // --- EV3: away (not home), else locked / unlocked. An unknown location falls back to the lock. ---
+  const ev3Where = stateOf("device_tracker.ev3_location");
+  const ev3Lock = stateOf("lock.ev3_door_lock");
+  const ev3Away = ev3Where !== undefined && !["home", "unknown", "unavailable"].includes(ev3Where);
+  const ev3 = ev3Away
+    ? { icon: "mdi:car-arrow-right", text: "Væk" }
+    : ev3Lock === "locked"
+      ? { icon: "mdi:lock-outline", text: "Låst" }
+      : ev3Lock === "unlocked"
+        ? { icon: "mdi:lock-open-variant-outline", text: "Ulåst" }
+        : { icon: "mdi:car-electric-outline", text: "--" };
+  const ev3Level = parseFloat(stateOf("sensor.ev3_ev_battery_level"));
+  const ev3Charging = stateOf("binary_sensor.ev3_ev_battery_charge") === "on";
+  const ev3Lines = [
+    Number.isNaN(ev3Level) ? "EV3" : `EV3 ${Math.round(ev3Level)}%`,
+    ev3Charging ? `${ev3.text}, lader` : ev3.text,
+  ];
 
   // --- Calendar (each calendar entity exposes its next event only, as in the Vue page) ---
   const fmtTimeRange = (startIso, endIso, allDay) => {
@@ -258,7 +279,7 @@ export default function render(hass, { html, mdi, now }) {
       .header { position: absolute; left: 7px; top: 0; width: 786px; height: 115px; border-bottom: 1px solid #000; overflow: hidden; }
       .header-row { position: absolute; left: 0; top: 29px; width: 786px; height: 69px; display: flex; }
       .header-cell { position: relative; height: 69px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
-      .clock-cell { width: 262px; border-left: 0; }
+      .clock-cell { width: 230px; border-left: 0; }
       .clock { position: absolute; left: 22px; top: -4px; font-family: Arial, Helvetica, sans-serif; font-size: 72px; font-weight: 700; line-height: 72px; white-space: nowrap; }
       .cell-icon { height: 39px; display: flex; align-items: center; justify-content: center; }
       .weather-top { height: 39px; width: 100%; display: flex; align-items: center; justify-content: center; }
@@ -330,13 +351,13 @@ export default function render(hass, { html, mdi, now }) {
         <div class="header">
           <div class="header-row">
             <div class="header-cell clock-cell"><div class="clock">${clock}</div></div>
-            <div class="header-cell" style="width: 163px">
+            <div class="header-cell" style="width: 140px">
               <div class="weather-top">${icon(weatherIcon, 46)}<div class="weather-reading">${weatherTemp}</div></div>
               <div class="weather-label ellipsis">Udendørs</div>
             </div>
-            ${statusCell(108, "mdi:door-open", openDoors)}
-            ${statusCell(113, "mdi:window-open", openWindows)}
-            ${statusCell(140, "mdi:lightbulb-on-outline", onLights)}
+            ${statusCell(160, openingsIcon, openings)}
+            ${statusCell(156, "mdi:lightbulb-on-outline", onLights)}
+            ${statusCell(100, ev3.icon, ev3Lines)}
           </div>
         </div>
 
