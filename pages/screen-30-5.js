@@ -340,7 +340,7 @@ export default function render(hass, { html, mdi, now }) {
       .garbage-row { display: flex; align-items: center; height: 24px; border-bottom: 1px solid #000; }
       .garbage-icon { width: 22px; margin-right: 5px; display: flex; justify-content: center; }
       .garbage-name { flex: 1; font-size: 12px; line-height: 12px; }
-      .garbage-day { width: 30px; margin-left: 5px; font-size: 11px; line-height: 11px; text-align: right; }
+      .garbage-day { width: 44px; margin-left: 5px; font-size: 11px; line-height: 11px; text-align: right; }
       .alerts-heading { display: flex; align-items: center; margin-top: 9px; height: 16px; }
       .alerts-heading .panel-title { flex: 1; }
       .alerts-count { width: 18px; font-size: 16px; line-height: 16px; }
