@@ -102,6 +102,7 @@ letters, digits, `-` and `_`; at most 20 parameters of up to 500 characters.
 | `GET /` | Lists pages with preview links |
 | `GET /page/<name>` | Full-colour PNG |
 | `GET /page/<name>?palette=6c` | PNG on a panel palette: `bw`, `bwr`, `bwry`, `6c` (white, black, red, yellow, blue, green). Colours snap to the nearest ink; anti-aliased edges become black, white or a neighbouring ink, so text never gains coloured fringes. No dithering |
+| `GET /page/<name>?palette=gray4` | PNG in grey levels for greyscale panels: `gray4` (black, dark grey, light grey, white) or `gray16`. Each pixel takes the nearest grey, so anti-aliased edges stay smooth |
 | `GET /page/<name>?key=value` | Any other parameter goes to the page as `ctx.params` (see URL parameters) |
 | `GET /page/<name>.html` | The page's markup, for debugging layout in a browser |
 | `GET /healthz` | `ok` |

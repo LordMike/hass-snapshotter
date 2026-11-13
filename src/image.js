@@ -10,20 +10,24 @@ const INKS = {
   green: [0, 255, 0],
 };
 
-export const PALETTES = {
+const INK_PALETTES = {
   bw: ["white", "black"],
   bwr: ["white", "black", "red"],
   bwry: ["white", "black", "red", "yellow"],
   "6c": ["white", "black", "red", "yellow", "blue", "green"],
 };
 
+// Greyscale panels: evenly spaced grey levels from black to white.
+const GRAY_LEVELS = { gray4: 4, gray16: 16 };
+
+export const PALETTES = { ...INK_PALETTES, ...GRAY_LEVELS };
+
 /**
  * Maps RGBA pixels onto a panel palette and returns an indexed PNG whose
- * pixels are the pure ink colours, so the display can map them 1:1.
+ * pixels are the panel's exact colours, so the display can map them 1:1.
  * No dithering: pages are flat UI, drawn in the panel's colours.
  */
 export function applyPalette(rgba, width, height, name) {
-  const inks = PALETTES[name].map((ink) => INKS[ink]);
   // Takumi's raw output is straight RGBA; flatten transparency onto white
   // (a page without a background is transparent, which would read as black).
   for (let i = 3; i < rgba.length; i += 4) {
@@ -32,7 +36,21 @@ export function applyPalette(rgba, width, height, name) {
     for (let c = i - 3; c < i; c++) rgba[c] = Math.round((rgba[c] * a + 255 * (255 - a)) / 255);
     rgba[i] = 255;
   }
+  if (name in GRAY_LEVELS) return grayPng(rgba, width, height, GRAY_LEVELS[name]);
+  const inks = INK_PALETTES[name].map((ink) => INKS[ink]);
   return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
+}
+
+// Each pixel takes the nearest grey level by luminance; anti-aliased edges stay
+// soft greys instead of being cut to black or white.
+function grayPng(rgba, width, height, levels) {
+  const inks = Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))));
+  const out = new Uint8Array(width * height);
+  for (let p = 0; p < out.length; p++) {
+    const luma = 0.299 * rgba[p * 4] + 0.587 * rgba[p * 4 + 1] + 0.114 * rgba[p * 4 + 2];
+    out[p] = Math.round((luma * (levels - 1)) / 255);
+  }
+  return indexedPng(out, width, height, inks);
 }
 
 // Next to a thin stroke, an edge pixel joins the stroke from about 30% coverage

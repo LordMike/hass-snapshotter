@@ -38,6 +38,12 @@ test("solid off-palette colours take the nearest ink", () => {
   assert.ok(out.every(([r, g, b]) => r === 255 && b === 0 && (g === 0 || g === 255)), JSON.stringify(out[12]));
 });
 
+test("gray4 maps to the nearest of four grey levels by luminance", () => {
+  const px = [[0, 0, 0, 255], [100, 100, 100, 255], [160, 160, 160, 255], [255, 255, 255, 255], [255, 0, 0, 255]];
+  const out = decode(applyPalette(image(px), 5, 1, "gray4"));
+  assert.deepEqual(out, [[0, 0, 0], [85, 85, 85], [170, 170, 170], [255, 255, 255], [85, 85, 85]]);
+});
+
 test("thin strokes keep partly covered edge pixels", () => {
   const white = [255, 255, 255, 255];
   const black = [0, 0, 0, 255];
