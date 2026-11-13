@@ -259,7 +259,7 @@ export default function render(hass, { html, mdi, now }) {
       .header-row { position: absolute; left: 0; top: 29px; width: 786px; height: 69px; display: flex; }
       .header-cell { position: relative; height: 69px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
       .clock-cell { width: 262px; border-left: 0; }
-      .clock { position: absolute; left: 22px; top: -6px; font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-size: 80px; font-weight: 700; line-height: 80px; white-space: nowrap; }
+      .clock { position: absolute; left: 22px; top: -4px; font-family: Arial, Helvetica, sans-serif; font-size: 72px; font-weight: 700; line-height: 72px; white-space: nowrap; }
       .cell-icon { height: 39px; display: flex; align-items: center; justify-content: center; }
       .weather-top { height: 39px; width: 100%; display: flex; align-items: center; justify-content: center; }
       .weather-top svg { margin-right: 16px; }

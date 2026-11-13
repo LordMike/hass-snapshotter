@@ -35,10 +35,14 @@ export function applyPalette(rgba, width, height, name) {
   return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
 }
 
-// An edge pixel joins the stroke from about 30% coverage instead of 50%, so
-// thin text keeps its strokes: the background ink's squared distance is
-// weighted by 5 (stroke wins when (1-c) < 2.24c).
+// Next to a thin stroke, an edge pixel joins the stroke from about 30% coverage
+// instead of 50%, so small text keeps its strokes: the background ink's squared
+// distance is weighted by 5 (stroke wins when (1-c) < 2.24c). A stroke counts as
+// thin when the other ink has fewer than THICK exact pixels in the 5x5 window;
+// edges of thick shapes (big digits, bars) use a plain 50% cut, which keeps
+// curves clean.
 const BACKGROUND_WEIGHT = 5;
+const THICK = 6;
 
 /**
  * Pixels that are exactly an ink keep it. Anti-aliased edges (pixels within
@@ -92,7 +96,13 @@ function mapToInks(data, width, height, inks) {
         }
       }
       let background = -1;
-      for (let i = 0, max = 0; i < inks.length; i++) if (counts[i] > max) [background, max] = [i, counts[i]];
+      let max = 0;
+      let second = 0;
+      for (let i = 0; i < inks.length; i++) {
+        if (counts[i] > max) [background, max, second] = [i, counts[i], max];
+        else if (counts[i] > second) second = counts[i];
+      }
+      if (second >= THICK) background = -1; // edge of a thick shape: plain 50% cut
       out[p] = edge ? nearest(p, mask, background) : nearest(p, 0);
     }
   }
