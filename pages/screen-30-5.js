@@ -1,12 +1,10 @@
 // screen-30-5: entrance e-paper (800x480). Ported from the hass-vue page.
-// The original is laid out at 960x680 and scaled to the screen; this port keeps the
-// design coordinates and scales the whole dashboard the same way.
+// The original is laid out at 960x680 and scaled non-uniformly to the screen; this
+// port lays it out natively at 800x480 (no transform) so text stays crisp in 1-bit.
 // render(hass, ctx) returns HTML; hass-snapshotter renders it to PNG.
 
 export const size = [800, 480];
 
-const DESIGN_WIDTH = 960;
-const DESIGN_HEIGHT = 680;
 const TZ = "Europe/Copenhagen";
 
 const WEATHER_ENTITY = "weather.openweathmap_hourly_with_local_data";
@@ -246,100 +244,99 @@ export default function render(hass, { html, mdi, now }) {
 
   const statusCell = (width, iconName, lines) => html`
     <div class="header-cell" style="width: ${width}px">
-      <div class="cell-icon">${icon(iconName, 49)}</div>
+      <div class="cell-icon">${icon(iconName, 36)}</div>
       <div class="status-lines ${lines[1] ? "small" : ""}">${lines.map((name) => html`<div class="ellipsis">${name}</div>`)}</div>
     </div>`;
 
   return html`
     <style>
       .screen { position: relative; width: 800px; height: 480px; overflow: hidden; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; }
-      .dashboard { position: absolute; left: 0; top: 0; width: ${DESIGN_WIDTH}px; height: ${DESIGN_HEIGHT}px; overflow: hidden; background: #fff;
-        transform: scale(${800 / DESIGN_WIDTH}, ${480 / DESIGN_HEIGHT}); transform-origin: 0 0; }
+      .dashboard { position: absolute; left: 0; top: 0; width: 800px; height: 480px; overflow: hidden; background: #fff; }
       .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .narrow { font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-weight: 700; }
 
-      .header { position: absolute; left: 8px; top: 0; width: 944px; height: 163px; border-bottom: 1px solid #000; overflow: hidden; }
-      .header-row { position: absolute; left: 0; top: 41px; width: 944px; height: 98px; display: flex; }
-      .header-cell { position: relative; height: 98px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
-      .clock-cell { width: 314px; border-left: 0; }
-      .clock { position: absolute; left: 26px; top: -6px; font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-size: 104px; font-weight: 700; line-height: 104px; white-space: nowrap; }
-      .cell-icon { height: 55px; display: flex; align-items: center; justify-content: center; }
-      .weather-top { height: 55px; width: 100%; display: flex; align-items: center; justify-content: center; }
-      .weather-top svg { margin-right: 22px; }
-      .weather-reading { font-size: 39px; line-height: 39px; }
-      .weather-label { margin-top: 8px; font-size: 18px; line-height: 18px; max-width: 82px; }
-      .status-lines { width: 100%; height: 43px; font-size: 17px; line-height: 20px; text-align: center; overflow: hidden; }
-      .status-lines.small { font-size: 14px; line-height: 19px; }
+      .header { position: absolute; left: 7px; top: 0; width: 786px; height: 115px; border-bottom: 1px solid #000; overflow: hidden; }
+      .header-row { position: absolute; left: 0; top: 29px; width: 786px; height: 69px; display: flex; }
+      .header-cell { position: relative; height: 69px; border-left: 1px solid #000; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+      .clock-cell { width: 262px; border-left: 0; }
+      .clock { position: absolute; left: 22px; top: -6px; font-family: "Arial Narrow", Arial, Helvetica, sans-serif; font-size: 80px; font-weight: 700; line-height: 80px; white-space: nowrap; }
+      .cell-icon { height: 39px; display: flex; align-items: center; justify-content: center; }
+      .weather-top { height: 39px; width: 100%; display: flex; align-items: center; justify-content: center; }
+      .weather-top svg { margin-right: 16px; }
+      .weather-reading { font-size: 30px; line-height: 30px; }
+      .weather-label { margin-top: 6px; font-size: 14px; line-height: 14px; max-width: 70px; }
+      .status-lines { width: 100%; height: 30px; font-size: 13px; line-height: 15px; text-align: center; overflow: hidden; }
+      .status-lines.small { font-size: 11px; line-height: 14px; }
 
-      .mid-panels { position: absolute; left: 8px; top: 179px; width: 944px; height: 383px; display: flex; overflow: hidden; }
-      .panel { position: relative; height: 383px; border: 1px solid #000; border-radius: 6px; overflow: hidden; padding: 14px 30px; }
-      .panel-title { font-size: 18px; line-height: 18px; text-transform: uppercase; white-space: nowrap; }
+      .mid-panels { position: absolute; left: 7px; top: 126px; width: 786px; height: 270px; display: flex; overflow: hidden; }
+      .panel { position: relative; height: 270px; border: 1px solid #000; border-radius: 5px; overflow: hidden; padding: 10px 25px; }
+      .panel-title { font-size: 15px; line-height: 15px; text-transform: uppercase; white-space: nowrap; }
 
-      .calendar-panel { width: 376px; padding-left: 24px; padding-right: 14px; }
+      .calendar-panel { width: 313px; padding-left: 20px; padding-right: 12px; }
       .calendar-title-row { display: flex; justify-content: space-between; align-items: flex-start; }
-      .calendar-date { font-size: 14px; line-height: 14px; white-space: nowrap; }
-      .calendar-today { margin-top: 13px; }
-      .calendar-today.empty { height: 34px; display: flex; align-items: center; justify-content: center; }
-      .calendar-empty { font-size: 16px; line-height: 16px; }
-      .calendar-event { display: flex; flex-wrap: wrap; min-height: 55px; border-bottom: 1px solid #000; font-size: 15px; line-height: 15px; }
-      .calendar-event.next { padding-top: 12px; }
-      .calendar-time { width: 100px; margin-right: 6px; font-size: 14px; line-height: 15px; }
-      .calendar-name { width: 230px; }
-      .calendar-meta { margin-left: 106px; width: 230px; display: flex; align-items: center; margin-top: 10px; font-size: 13px; line-height: 13px; white-space: nowrap; }
-      .calendar-meta .loc { width: 151px; margin-left: 4px; }
-      .calendar-person { width: 58px; margin-left: 4px; text-align: right; }
-      .upcoming-title { margin-top: 9px; margin-bottom: 8px; font-size: 16px; line-height: 16px; }
-      .upcoming-row { display: flex; align-items: center; height: 21px; font-size: 13px; line-height: 13px; white-space: nowrap; }
-      .u-date { width: 83px; }
-      .u-time { width: 50px; }
+      .calendar-date { font-size: 12px; line-height: 12px; white-space: nowrap; }
+      .calendar-today { margin-top: 9px; }
+      .calendar-today.empty { height: 24px; display: flex; align-items: center; justify-content: center; }
+      .calendar-empty { font-size: 13px; line-height: 13px; }
+      .calendar-event { display: flex; flex-wrap: wrap; min-height: 39px; border-bottom: 1px solid #000; font-size: 13px; line-height: 13px; }
+      .calendar-event.next { padding-top: 8px; }
+      .calendar-time { width: 83px; margin-right: 5px; font-size: 12px; line-height: 13px; }
+      .calendar-name { width: 191px; }
+      .calendar-meta { margin-left: 88px; width: 191px; display: flex; align-items: center; margin-top: 7px; font-size: 11px; line-height: 11px; white-space: nowrap; }
+      .calendar-meta .loc { width: 125px; margin-left: 4px; }
+      .calendar-person { width: 48px; margin-left: 4px; text-align: right; }
+      .upcoming-title { margin-top: 6px; margin-bottom: 6px; font-size: 13px; line-height: 13px; }
+      .upcoming-row { display: flex; align-items: center; height: 15px; font-size: 11px; line-height: 11px; white-space: nowrap; }
+      .u-date { width: 69px; }
+      .u-time { width: 42px; }
       .u-title { flex: 1; }
 
-      .transport-panel { width: 286px; margin-left: 11px; padding-left: 9px; padding-right: 16px; }
-      .transport-table { margin-top: 20px; font-size: 14px; line-height: 14px; }
-      .tr { display: flex; height: 33px; align-items: center; border-bottom: 1px solid #000; }
-      .tr.head { height: 30px; align-items: flex-start; }
-      .c1 { width: 59px; }
-      .c2 { width: 44px; }
-      .c3 { width: 89px; }
-      .c4 { flex: 1; width: 67px; }
+      .transport-panel { width: 238px; margin-left: 9px; padding-left: 7px; padding-right: 13px; }
+      .transport-table { margin-top: 14px; font-size: 12px; line-height: 12px; }
+      .tr { display: flex; height: 23px; align-items: center; border-bottom: 1px solid #000; }
+      .tr.head { height: 21px; align-items: flex-start; }
+      .c1 { width: 49px; }
+      .c2 { width: 37px; }
+      .c3 { width: 74px; }
+      .c4 { flex: 1; width: 56px; }
 
-      .side-panel { width: 260px; margin-left: 11px; padding-left: 7px; padding-right: 24px; }
-      .side-title-row { height: 24px; }
-      .side-title-row .panel-title { font-size: 19px; line-height: 19px; }
-      .garbage-list { margin-top: 8px; }
-      .garbage-row { display: flex; align-items: center; height: 34px; border-bottom: 1px solid #000; }
-      .garbage-icon { width: 26px; margin-right: 6px; display: flex; justify-content: center; }
-      .garbage-name { flex: 1; font-size: 14px; line-height: 14px; }
-      .garbage-day { width: 34px; margin-left: 6px; font-size: 13px; line-height: 13px; text-align: right; }
-      .alerts-heading { display: flex; align-items: center; margin-top: 13px; height: 23px; }
+      .side-panel { width: 217px; margin-left: 9px; padding-left: 6px; padding-right: 20px; }
+      .side-title-row { height: 17px; }
+      .side-title-row .panel-title { font-size: 16px; line-height: 16px; }
+      .garbage-list { margin-top: 6px; }
+      .garbage-row { display: flex; align-items: center; height: 24px; border-bottom: 1px solid #000; }
+      .garbage-icon { width: 22px; margin-right: 5px; display: flex; justify-content: center; }
+      .garbage-name { flex: 1; font-size: 12px; line-height: 12px; }
+      .garbage-day { width: 30px; margin-left: 5px; font-size: 11px; line-height: 11px; text-align: right; }
+      .alerts-heading { display: flex; align-items: center; margin-top: 9px; height: 16px; }
       .alerts-heading .panel-title { flex: 1; }
-      .alerts-count { width: 21px; font-size: 19px; line-height: 19px; }
-      .alert-list { margin-top: 10px; }
-      .alert-row { display: flex; align-items: center; height: 31px; border-bottom: 1px solid #000; font-size: 13px; line-height: 13px; white-space: nowrap; }
+      .alerts-count { width: 18px; font-size: 16px; line-height: 16px; }
+      .alert-list { margin-top: 7px; }
+      .alert-row { display: flex; align-items: center; height: 22px; border-bottom: 1px solid #000; font-size: 11px; line-height: 11px; white-space: nowrap; }
       .alert-row.last { border-bottom: 0; }
-      .alert-icon { width: 24px; display: flex; }
+      .alert-icon { width: 20px; display: flex; }
       .alert-text { flex: 1; }
 
-      .weather-strip { position: absolute; left: 8px; top: 574px; width: 944px; height: 78px; border: 1px solid #000; border-radius: 6px; display: flex; align-items: center; overflow: hidden; }
-      .strip-item { height: 51px; display: flex; align-items: center; border-left: 1px solid #000; }
+      .weather-strip { position: absolute; left: 7px; top: 405px; width: 786px; height: 55px; border: 1px solid #000; border-radius: 5px; display: flex; align-items: center; overflow: hidden; }
+      .strip-item { height: 36px; display: flex; align-items: center; border-left: 1px solid #000; }
       .strip-item.first { border-left: 0; }
-      .strip-icon { width: 84px; display: flex; justify-content: center; }
-      .strip-copy { display: flex; flex-direction: column; font-size: 15px; line-height: 15px; overflow: hidden; white-space: nowrap; }
-      .strip-copy .title { margin-bottom: 9px; }
-      .uv-index { font-size: 37px; line-height: 37px; }
+      .strip-icon { width: 70px; display: flex; justify-content: center; }
+      .strip-copy { display: flex; flex-direction: column; font-size: 12px; line-height: 12px; overflow: hidden; white-space: nowrap; }
+      .strip-copy .title { margin-bottom: 6px; }
+      .uv-index { font-size: 28px; line-height: 28px; }
     </style>
     <div class="screen">
       <div class="dashboard">
         <div class="header">
           <div class="header-row">
             <div class="header-cell clock-cell"><div class="clock">${clock}</div></div>
-            <div class="header-cell" style="width: 196px">
-              <div class="weather-top">${icon(weatherIcon, 62)}<div class="weather-reading">${weatherTemp}</div></div>
+            <div class="header-cell" style="width: 163px">
+              <div class="weather-top">${icon(weatherIcon, 46)}<div class="weather-reading">${weatherTemp}</div></div>
               <div class="weather-label ellipsis">Udendørs</div>
             </div>
-            ${statusCell(130, "mdi:door-open", openDoors)}
-            ${statusCell(136, "mdi:window-open", openWindows)}
-            ${statusCell(168, "mdi:lightbulb-on-outline", onLights)}
+            ${statusCell(108, "mdi:door-open", openDoors)}
+            ${statusCell(113, "mdi:window-open", openWindows)}
+            ${statusCell(140, "mdi:lightbulb-on-outline", onLights)}
           </div>
         </div>
 
@@ -357,7 +354,7 @@ export default function render(hass, { html, mdi, now }) {
                     <div class="calendar-time ellipsis">${fmtTimeRange(ev.startIso, ev.endIso, ev.allDay)}</div>
                     <div class="calendar-name ellipsis">${ev.title}</div>
                     <div class="calendar-meta">
-                      ${icon("mdi:map-marker", 12)}
+                      ${icon("mdi:map-marker", 10)}
                       <div class="loc ellipsis">${ev.location}</div>
                       <div class="calendar-person ellipsis">${ev.person}</div>
                     </div>
@@ -397,7 +394,7 @@ export default function render(hass, { html, mdi, now }) {
               ${garbagePickups.map(
                 (g) => html`
                   <div class="garbage-row">
-                    <div class="garbage-icon">${icon(g.icon, 17)}</div>
+                    <div class="garbage-icon">${icon(g.icon, 14)}</div>
                     <div class="garbage-name ellipsis">${g.name}</div>
                     <div class="garbage-day ellipsis">${g.dayLabel}</div>
                   </div>`,
@@ -406,13 +403,13 @@ export default function render(hass, { html, mdi, now }) {
             <div class="alerts-heading">
               <div class="panel-title narrow">Advarsler</div>
               <div class="alerts-count">${allAlerts.length}</div>
-              ${icon("mdi:alert", 21)}
+              ${icon("mdi:alert", 16)}
             </div>
             <div class="alert-list">
               ${visibleAlerts.map(
                 (a, i) => html`
                   <div class="alert-row ${i === visibleAlerts.length - 1 ? "last" : ""}">
-                    <div class="alert-icon">${icon("mdi:alert", 16)}</div>
+                    <div class="alert-icon">${icon("mdi:alert", 13)}</div>
                     <div class="alert-text ellipsis">${a.message || a}</div>
                   </div>`,
               )}
@@ -421,17 +418,17 @@ export default function render(hass, { html, mdi, now }) {
         </div>
 
         <div class="weather-strip">
-          <div class="strip-item first" style="width: 310px">
-            <div class="strip-icon">${icon("mdi:weather-rainy", 44)}</div>
+          <div class="strip-item first" style="width: 258px">
+            <div class="strip-icon">${icon("mdi:weather-rainy", 34)}</div>
             <div class="strip-copy"><div class="title narrow">${rainTitle}</div><div>${rainDetail}</div></div>
           </div>
-          <div class="strip-item" style="width: 279px">
-            <div class="strip-icon">${icon("mdi:weather-windy", 44)}</div>
+          <div class="strip-item" style="width: 233px">
+            <div class="strip-icon">${icon("mdi:weather-windy", 34)}</div>
             <div class="strip-copy"><div class="title narrow">${windTitle}</div><div>${windDetail}</div></div>
           </div>
           <div class="strip-item" style="flex: 1">
-            <div class="strip-icon">${icon("mdi:weather-sunny", 44)}</div>
-            <div class="strip-copy" style="width: 98px"><div class="title narrow">UV-index</div><div>I dag (max)</div></div>
+            <div class="strip-icon">${icon("mdi:weather-sunny", 34)}</div>
+            <div class="strip-copy" style="width: 82px"><div class="title narrow">UV-index</div><div>I dag (max)</div></div>
             <div class="uv-index">${uvIndex}</div>
           </div>
         </div>
