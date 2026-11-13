@@ -64,7 +64,7 @@ async function loadPage(pagesDir, name) {
  * @param {string[]} knownIds entities the page read last time, fetched up front
  * @returns {Promise<{png: Buffer, timings: Record<string, number>, ids: string[]}>}
  */
-export async function renderPageModule({ pagesDir, client }, name, { width, height }, knownIds = []) {
+export async function renderPageModule({ pagesDir, client }, name, { width, height, palette, dither }, knownIds = []) {
   const timings = {};
   let last = Date.now();
   const mark = (k) => {
@@ -100,8 +100,16 @@ export async function renderPageModule({ pagesDir, client }, name, { width, heig
     await client.fetchStates(missing, fetched);
     mark("fetch");
   }
-  const size = page.size ?? [width, height];
-  const png = await r.render(markup, { width: size[0], height: size[1] });
+  const [w, h] = page.size ?? [width, height];
+  if (!palette) {
+    const png = await r.render(markup, { width: w, height: h });
+    mark("render");
+    return { png, timings, ids: Object.keys(fetched) };
+  }
+  const rgba = await r.render(markup, { width: w, height: h, format: "raw" });
   mark("render");
+  const { applyPalette } = await import("./image.js");
+  const png = applyPalette(rgba, w, h, palette, dither);
+  mark("palette");
   return { png, timings, ids: Object.keys(fetched) };
 }

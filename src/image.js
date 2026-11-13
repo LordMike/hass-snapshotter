@@ -1,10 +1,6 @@
-// Loaded only when a palette is requested, so sharp and the WASM ditherer cost
-// nothing between renders.
-import sharp from "sharp";
+// Maps rendered RGBA pixels onto a panel palette and writes an indexed PNG.
+import { deflateSync, crc32 } from "node:zlib";
 import { ditherImage, Palette } from "@opendisplay/epaper-dithering";
-
-sharp.cache(false);
-sharp.concurrency(1);
 
 const INKS = {
   white: [255, 255, 255],
@@ -42,17 +38,17 @@ function palette(name) {
 }
 
 /**
- * Maps a screenshot onto a panel palette. Output pixels are the pure ink
- * colours (not preview colours), so the display can map them 1:1.
+ * Maps RGBA pixels onto a panel palette and returns an indexed PNG. Output
+ * pixels are the pure ink colours (not preview colours), so the display can
+ * map them 1:1.
  */
-export async function applyPalette(png, name, dither) {
+export function applyPalette(rgba, width, height, name, dither) {
   const { inks, pal } = palette(name);
-  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  if (dither === "none") return encode(mapToNeighbourInks(data, info.width, info.height, inks), inks, info);
+  if (dither === "none") return indexedPng(mapToNeighbourInks(rgba, width, height, inks), width, height, inks);
 
-  const pixels = new Uint8ClampedArray(data.buffer, data.byteOffset, data.length);
-  const { indices } = ditherImage({ width: info.width, height: info.height, data: pixels }, pal, { mode: dither });
-  return encode(indices, inks, info);
+  const pixels = new Uint8ClampedArray(rgba.buffer, rgba.byteOffset, rgba.length);
+  const { indices } = ditherImage({ width, height, data: pixels }, pal, { mode: dither });
+  return indexedPng(indices, width, height, inks);
 }
 
 /**
@@ -105,14 +101,29 @@ function mapToNeighbourInks(data, width, height, inks) {
   return out;
 }
 
-function encode(indices, inks, info) {
-  const rgb = Buffer.alloc(indices.length * 3);
-  for (let i = 0; i < indices.length; i++) rgb.set(inks[indices[i]], i * 3);
-  return (
-    sharp(rgb, { raw: { width: info.width, height: info.height, channels: 3 } })
-      // colours must stay above the ink count: at exactly inks.length the
-      // quantiser merges inks (white + yellow became pale yellow).
-      .png({ palette: true, colours: 256, dither: 0, compressionLevel: 9 })
-      .toBuffer()
-  );
+// Minimal 8-bit indexed PNG: IHDR, PLTE with the inks, one IDAT, IEND.
+function indexedPng(indices, width, height, inks) {
+  const chunk = (type, data) => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.set([8, 3, 0, 0, 0], 8); // bit depth 8, colour type 3 (palette)
+
+  const rows = Buffer.alloc((width + 1) * height); // each row: filter byte 0, then indices
+  for (let y = 0; y < height; y++) rows.set(indices.subarray(y * width, (y + 1) * width), y * (width + 1) + 1);
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("PLTE", Buffer.from(inks.flat())),
+    chunk("IDAT", deflateSync(rows, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }
