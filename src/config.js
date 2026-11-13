@@ -28,5 +28,7 @@ export function loadConfig(env = process.env) {
     chromiumPath: env.CHROMIUM_PATH || "/usr/bin/chromium-headless-shell",
     // Kept between launches so HA's JS is served from disk cache and V8's code cache.
     profileDir: env.PROFILE_DIR || (existsSync("/data") ? "/data/chromium-profile" : "/tmp/chromium-profile"),
+    // Browser-free pages: <pagesDir>/<name>.js. The app maps its config folder to /config.
+    pagesDir: env.PAGES_DIR || (existsSync("/config") ? "/config/pages" : "pages"),
   };
 }

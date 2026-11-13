@@ -8,6 +8,9 @@ arch:
 init: false
 startup: application
 boot: auto
+# Browser-free pages live in this app's config folder: /addon_configs/<slug>/pages/<name>.js
+map:
+  - addon_config:rw
 ports:
   8080/tcp: 10010
 ports_description:

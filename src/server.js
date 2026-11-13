@@ -2,7 +2,8 @@ import http from "node:http";
 import { loadConfig } from "./config.js";
 import { resolveRenderPath, PathError } from "./paths.js";
 import { BrowserHost } from "./browser.js";
-import { renderPage, RenderError } from "./render.js";
+import { fork } from "node:child_process";
+import { renderPage } from "./render.js";
 
 const config = loadConfig();
 const host = new BrowserHost({
@@ -78,6 +79,47 @@ async function handleRender(req, res, rawPath, query) {
   res.end(result.png);
 }
 
+// Browser-free mode. Each render runs in a child process that exits afterwards,
+// so the renderer's native modules don't stay resident between renders.
+const pageMemory = new Map(); // page name -> entity ids it read last time
+let haConfig = null;
+
+function renderInChild(name, params) {
+  return new Promise((resolve, reject) => {
+    const child = fork(new URL("./page-worker.js", import.meta.url), { serialization: "advanced" });
+    const timer = setTimeout(() => child.kill("SIGKILL"), config.readyTimeoutMs);
+    child.once("message", (msg) => {
+      clearTimeout(timer);
+      if (msg.ok) resolve(msg);
+      else reject(Object.assign(new Error(msg.message), { status: msg.status }));
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      reject(Object.assign(new Error(`Page renderer exited (${code ?? "killed"})`), { status: 500 }));
+    });
+    child.send({ config, name, params, knownIds: pageMemory.get(name) ?? [], haConfig });
+  });
+}
+
+async function handlePage(res, name, query) {
+  const params = parseParams(query);
+  const started = Date.now();
+  const result = await renderInChild(name, params);
+  pageMemory.set(name, result.ids);
+  haConfig = result.haConfig;
+  result.png = Buffer.from(result.png);
+  result.timings.total = Date.now() - started;
+  const timings = Object.entries(result.timings).map(([k, v]) => `${k}=${v}`).join(";");
+  console.log(`page ${name} entities=${result.ids.length} ${timings} bytes=${result.png.length}`);
+  res.writeHead(200, {
+    "Content-Type": "image/png",
+    "Content-Length": result.png.length,
+    "Cache-Control": "no-store",
+    "X-Render-Timings": timings,
+  });
+  res.end(result.png);
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const [rawPath, search = ""] = req.url.split("?");
@@ -86,6 +128,9 @@ const server = http.createServer(async (req, res) => {
     // The raw path goes to the guard so percent-encoded tricks are seen there.
     if (rawPath.startsWith("/render/")) {
       return await handleRender(req, res, rawPath.slice("/render/".length), new URLSearchParams(search));
+    }
+    if (rawPath.startsWith("/page/")) {
+      return await handlePage(res, rawPath.slice("/page/".length), new URLSearchParams(search));
     }
     throw Object.assign(new Error("Use /render/<home-assistant path>?viewport=800x480"), { status: 404 });
   } catch (err) {

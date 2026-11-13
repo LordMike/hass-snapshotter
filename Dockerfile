@@ -8,6 +8,7 @@ FROM debian:trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nodejs \
+        ca-certificates \
         chromium-headless-shell \
         fonts-dejavu-core \
         fonts-liberation \
@@ -20,6 +21,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
+# Example pages. As an HA app, pages are read from the app's config folder instead.
+COPY pages ./pages
 
 EXPOSE 8080
 # tini reaps Chromium's child processes when a browser is closed.
