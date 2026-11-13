@@ -1,5 +1,5 @@
 {
-  "name": "ha-snapshotter",
+  "name": "hass-snapshotter",
   "version": "0.4.0",
   "description": "Render Home Assistant data to PNG images for e-paper displays, without a browser.",
   "private": true,

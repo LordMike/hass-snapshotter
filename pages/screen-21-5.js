@@ -1,5 +1,5 @@
 // screen-21-5: bathroom e-paper (800x480, 6 colours). Ported from the hass-vue page.
-// render(hass, ctx) returns HTML; ha-snapshotter fetches only the entities read here.
+// render(hass, ctx) returns HTML; hass-snapshotter renders it to PNG.
 
 export const size = [800, 480];
 

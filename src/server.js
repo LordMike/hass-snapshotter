@@ -107,7 +107,7 @@ function index(res) {
   const rows = pages.map((p) => `<li><a href="page/${p}">${p}</a> · <a href="page/${p}?palette=6c">6c</a> · <a href="page/${p}.html">html</a></li>`);
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(
-    `<!doctype html><meta charset="utf-8"><title>ha-snapshotter</title><h1>ha-snapshotter</h1>` +
+    `<!doctype html><meta charset="utf-8"><title>hass-snapshotter</title><h1>hass-snapshotter</h1>` +
       `<p>Pages in <code>${config.pagesDir}</code>:</p><ul>${rows.join("") || "<li>none yet</li>"}</ul>`,
   );
 }
@@ -131,7 +131,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(config.port, () => {
   const pagesDir = resolve(config.pagesDir);
-  console.log(`ha-snapshotter on :${config.port}, pages in ${pagesDir}`);
+  console.log(`hass-snapshotter ${process.env.SNAPSHOTTER_VERSION ?? "local"} on :${config.port}, pages in ${pagesDir}`);
   if (!existsSync(pagesDir)) console.log(`WARNING: the pages folder ${pagesDir} does not exist yet; create it and add <name>.js pages`);
   else console.log(`pages: ${listPages(pagesDir).join(", ") || "none yet"}`);
   if (config.error) return console.log(`WARNING: ${config.error}`);

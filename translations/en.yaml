@@ -12,4 +12,4 @@ configuration:
     name: Long-lived token (optional)
     description: Leave empty to use the built-in connection. Only needed together with a custom URL.
 network:
-  8080/tcp: Render endpoint. Open it in a browser to list and preview pages. HA itself can reach the app at http://local-ha-snapshotter:8080.
+  8080/tcp: Render endpoint. Open it in a browser to list and preview pages. HA itself can reach the app on its hostname, port 8080 (shown on the app page).

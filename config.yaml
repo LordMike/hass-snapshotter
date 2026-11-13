@@ -1,6 +1,6 @@
-name: ha-snapshotter
+name: hass-snapshotter (local build)
 version: "0.4.0"
-slug: ha_snapshotter
+slug: hass_snapshotter
 description: Render Home Assistant data to PNG images for e-paper displays, without a browser
 arch:
   - aarch64
@@ -16,7 +16,7 @@ map:
 ports:
   8080/tcp: 10010
 ports_description:
-  8080/tcp: Render endpoint for browsers and other hosts. HA itself can use http://local-ha-snapshotter:8080
+  8080/tcp: Render endpoint for browsers and other hosts. HA itself can use http://<app hostname>:8080
 watchdog: http://[HOST]:[PORT:8080]/healthz
 options:
   pages_dir: /homeassistant/dashboard-pages

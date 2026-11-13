@@ -1,4 +1,4 @@
-# ha-snapshotter
+# hass-snapshotter
 
 Renders Home Assistant data to PNG images for e-paper displays, such as
 OpenDisplay panels fed by `opendisplay.drawcustom` with a `dlimg` element.
@@ -11,12 +11,16 @@ under a second on a desktop (~85 MB peak).
 
 ## Install as a Home Assistant app (recommended)
 
-1. Copy this folder to `/addons/ha_snapshotter` on the HA host (Samba, SSH).
-2. Settings → Apps → App store → ⋮ → Check for updates; "ha-snapshotter"
-   appears under Local apps. Install and start it. It connects to HA by itself;
-   no token is needed.
+1. Add the app repository `https://github.com/LordMike/hass-addons` under
+   Settings → Apps → App store → ⋮ → Repositories.
+2. Install "hass-snapshotter" and start it. It uses a prebuilt image for
+   aarch64/amd64 and connects to HA by itself; no token is needed.
 3. Put pages in `/config/dashboard-pages/<name>.js` (the `pages_dir` option).
 4. Open `http://<ha-host>:10010/` in a browser to list and preview pages.
+
+To build it on the HA host instead, copy this repository to
+`/addons/hass_snapshotter` (it has its own `config.yaml`) and install it from
+Local apps.
 
 Use it from a display:
 
@@ -25,15 +29,17 @@ action: opendisplay.drawcustom
 data:
   payload:
     - type: dlimg
-      url: http://local-ha-snapshotter:8080/page/screen-21-5?palette=6c
+      url: http://<app hostname>:8080/page/screen-21-5?palette=6c
       x: 0
       y: 0
       xsize: 800
       ysize: 480
 ```
 
-`local-ha-snapshotter:8080` is how HA itself reaches the app; browsers and
-other hosts use `http://<ha-host>:10010`.
+HA itself reaches the app on its hostname (shown on the app's page, e.g.
+`e141bb7c-hass-snapshotter` from the repository or `local-hass-snapshotter`
+when built locally) at port 8080; browsers and other hosts use
+`http://<ha-host>:10010`.
 
 ## Pages
 
@@ -119,8 +125,7 @@ Assistant unreachable or rejecting the token, 503 not configured or busy,
 ## Standalone Docker
 
 ```
-docker build -t ha-snapshotter .
-docker run -p 8080:8080 -v "$PWD/pages:/app/pages:ro" -e HA_URL=https://ha.example.com -e HA_TOKEN=... ha-snapshotter
+docker run -p 8080:8080 -v "$PWD/pages:/app/pages:ro" -e HA_URL=https://ha.example.com -e HA_TOKEN=... ghcr.io/lordmike/hass-snapshotter
 ```
 
 ## Development
@@ -128,5 +133,11 @@ docker run -p 8080:8080 -v "$PWD/pages:/app/pages:ro" -e HA_URL=https://ha.examp
 ```
 npm install
 npm test
-HA_URL=... node --env-file=.env src/server.js
+cp dev.env.example .tmp/dev.env   # fill in HA_URL and HA_TOKEN
+node --env-file=.tmp/dev.env src/server.js
 ```
+
+Releases: pushing a plain version tag (e.g. `0.4.0`, no `v`) builds and
+publishes `ghcr.io/lordmike/hass-snapshotter` for amd64 and arm64, creates a
+GitHub release and bumps the app in `LordMike/hass-addons`. The committed
+`.env` holds only these Docker build settings; keep secrets in `.tmp/`.

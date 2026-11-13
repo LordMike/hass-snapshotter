@@ -1,0 +1,25 @@
+name: Build hass-snapshotter
+description: Install dependencies and run the tests
+
+# Repository-owned build contract:
+# - CI provides the checked-out source and CI_* environment variables.
+# - This action validates the repository without publishing.
+# - Docker publication is handled separately by the managed publisher, which
+#   builds Dockerfile for the platforms in .env.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: 24
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci --ignore-scripts --no-audit --no-fund
+
+    - name: Test
+      shell: bash
+      run: npm test

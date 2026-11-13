@@ -1,7 +1,12 @@
 node_modules
 .git
+.github
+.tmp
 .env
+dev.env.example
 out
 test
 translations
+pages
 *.md
+LICENSE.txt

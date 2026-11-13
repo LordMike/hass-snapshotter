@@ -1,7 +1,7 @@
 // screen-30-5: entrance e-paper (800x480). Ported from the hass-vue page.
 // The original is laid out at 960x680 and scaled to the screen; this port keeps the
 // design coordinates and scales the whole dashboard the same way.
-// render(hass, ctx) returns HTML; ha-snapshotter fetches only the entities read here.
+// render(hass, ctx) returns HTML; hass-snapshotter renders it to PNG.
 
 export const size = [800, 480];
 

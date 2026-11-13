@@ -19,6 +19,15 @@ RUN apk add --no-cache nodejs icu-data-full \
     && rm -rf /root/.npm /tmp/*
 COPY src ./src
 
+# CI passes the release version (or "dev"); HA builds pass the app version.
+ARG BUILD_VERSION=local
+ENV SNAPSHOTTER_VERSION=${BUILD_VERSION}
+LABEL \
+  io.hass.version="${BUILD_VERSION}" \
+  io.hass.type="app" \
+  io.hass.arch="aarch64|amd64" \
+  org.opencontainers.image.source="https://github.com/LordMike/hass-snapshotter"
+
 EXPOSE 8080
 # Node runs as PID 1: it handles SIGTERM itself and reaps the render children it forks.
 CMD ["node", "src/server.js"]
