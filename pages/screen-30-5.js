@@ -87,7 +87,7 @@ export default function render(hass, { html, mdi, now }) {
     seen.add(groupId);
     const expanded = [];
     for (const id of attr(groupId, "entity_id") || []) {
-      if (id.startsWith("group.")) expanded.push(...expandGroupMembers(id, seen));
+      if (Array.isArray(attr(id, "entity_id"))) expanded.push(...expandGroupMembers(id, seen)); // nested group helper
       else expanded.push(id);
     }
     return expanded;
@@ -104,10 +104,10 @@ export default function render(hass, { html, mdi, now }) {
     return [`${names[0]}, ${names[1]}`, overflow > 0 ? `${names[2]} +${overflow} mere` : names[2]];
   };
   const activeGroupMembers = (groupId) => expandGroupMembers(groupId).filter((id) => stateOf(id) === "on");
-  const openContacts = activeGroupMembers("group.doors_windows");
+  const openContacts = activeGroupMembers("binary_sensor.all_doors_windows");
   const openDoors = buildAreaStatusLines(openContacts.filter(isDoor));
   const openWindows = buildAreaStatusLines(openContacts.filter(isWindow));
-  const onLights = buildAreaStatusLines(activeGroupMembers("group.lights_all"));
+  const onLights = buildAreaStatusLines(activeGroupMembers("light.all_lights"));
 
   // --- Calendar (each calendar entity exposes its next event only, as in the Vue page) ---
   const fmtTimeRange = (startIso, endIso, allDay) => {
