@@ -83,6 +83,19 @@ function mapToInks(data, width, height, inks) {
       }
     }
   }
+  // Exact pixels in each pixel's 5-wide row span, so a pixel with no exact
+  // ink in its 5x5 window is found with 5 reads instead of 25.
+  const near = new Uint8Array(n);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let c = 0;
+    for (let x = 0; x < Math.min(2, width); x++) if (exact[row + x] >= 0) c++;
+    for (let x = 0; x < width; x++) {
+      if (x + 2 < width && exact[row + x + 2] >= 0) c++;
+      if (x - 3 >= 0 && exact[row + x - 3] >= 0) c--;
+      near[row + x] = c;
+    }
+  }
   const baseMask = (1 << keys.indexOf(0)) | (1 << keys.indexOf(0xffffff));
 
   const rgb = Int32Array.from(inks.flat());
@@ -108,6 +121,7 @@ function mapToInks(data, width, height, inks) {
   const allInks = (1 << inks.length) - 1;
   const counts = new Uint16Array(inks.length);
 
+
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const p = y * width + x;
@@ -115,16 +129,24 @@ function mapToInks(data, width, height, inks) {
         out[p] = exact[p];
         continue;
       }
+      const y0 = Math.max(0, y - 2);
+      const y1 = Math.min(height - 1, y + 2);
+      let any = 0;
+      for (let yy = y0; yy <= y1; yy++) any += near[yy * width + x];
+      if (!any) {
+        out[p] = nearest(p, allInks, -1);
+        continue;
+      }
       let mask = baseMask;
-      let edge = false;
       counts.fill(0);
-      for (let yy = Math.max(0, y - 2); yy <= Math.min(height - 1, y + 2); yy++) {
-        for (let xx = Math.max(0, x - 2); xx <= Math.min(width - 1, x + 2); xx++) {
+      const x0 = Math.max(0, x - 2);
+      const x1 = Math.min(width - 1, x + 2);
+      for (let yy = y0; yy <= y1; yy++) {
+        for (let xx = x0; xx <= x1; xx++) {
           const e = exact[yy * width + xx];
           if (e >= 0) {
             mask |= 1 << e;
             counts[e]++;
-            edge = true;
           }
         }
       }
@@ -140,7 +162,7 @@ function mapToInks(data, width, height, inks) {
         } else if (c > second) second = c;
       }
       if (second >= THICK) background = -1; // edge of a thick shape: plain 50% cut
-      out[p] = edge ? nearest(p, mask, background) : nearest(p, allInks, -1);
+      out[p] = nearest(p, mask, background);
     }
   }
   return out;
