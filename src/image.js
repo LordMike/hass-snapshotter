@@ -78,19 +78,27 @@ function mapToInks(data, width, height, inks) {
   for (let p = 0; p < n; p++) exact[p] = inkOf.get(key(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])) ?? -1;
   const baseMask = (1 << inkOf.get(key(0, 0, 0))) | (1 << inkOf.get(key(255, 255, 255)));
 
-  const nearest = (p, mask, background = -1) => {
+  const rgb = Int32Array.from(inks.flat());
+  const nearest = (p, mask, background) => {
+    const r = data[p * 4];
+    const g = data[p * 4 + 1];
+    const b = data[p * 4 + 2];
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < inks.length; i++) {
-      if (mask && !(mask & (1 << i))) continue;
-      const dr = data[p * 4] - inks[i][0];
-      const dg = data[p * 4 + 1] - inks[i][1];
-      const db = data[p * 4 + 2] - inks[i][2];
+      if (!(mask & (1 << i))) continue;
+      const dr = r - rgb[i * 3];
+      const dg = g - rgb[i * 3 + 1];
+      const db = b - rgb[i * 3 + 2];
       const d = (dr * dr + dg * dg + db * db) * (i === background ? BACKGROUND_WEIGHT : 1);
-      if (d < bestDist) [best, bestDist] = [i, d];
+      if (d < bestDist) {
+        best = i;
+        bestDist = d;
+      }
     }
     return best;
   };
+  const allInks = (1 << inks.length) - 1;
   const counts = new Uint16Array(inks.length);
 
   for (let y = 0; y < height; y++) {
@@ -117,11 +125,15 @@ function mapToInks(data, width, height, inks) {
       let max = 0;
       let second = 0;
       for (let i = 0; i < inks.length; i++) {
-        if (counts[i] > max) [background, max, second] = [i, counts[i], max];
-        else if (counts[i] > second) second = counts[i];
+        const c = counts[i];
+        if (c > max) {
+          second = max;
+          max = c;
+          background = i;
+        } else if (c > second) second = c;
       }
       if (second >= THICK) background = -1; // edge of a thick shape: plain 50% cut
-      out[p] = edge ? nearest(p, mask, background) : nearest(p, 0);
+      out[p] = edge ? nearest(p, mask, background) : nearest(p, allInks, -1);
     }
   }
   return out;
