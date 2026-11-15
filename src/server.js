@@ -105,7 +105,7 @@ async function handlePage(res, file, query) {
     trace.note(err.message, "error");
   }
   res.writeHead(error?.status ?? 200, { "Cache-Control": "no-store", "Content-Type": "text/html; charset=utf-8" });
-  res.end(debugPage({ name, query, palettes: Object.keys(PALETTES), trace, result, error }));
+  res.end(debugPage({ name, query, palettes: Object.keys(PALETTES), trace, result, error, indexPage: config.indexPage }));
 }
 
 // Renders a page; writes it to `res` if given, and returns the result.
@@ -159,7 +159,10 @@ const server = http.createServer(async (req, res) => {
     const [path, search = ""] = req.url.split("?");
     if (req.method !== "GET") throw fail(405, "Only GET");
     if (path === "/healthz") return res.end("ok\n");
-    if (path === "/") return index(res);
+    if (path === "/") {
+      if (!config.indexPage) throw fail(404, "The index page is disabled (index_page option)");
+      return index(res);
+    }
     if (config.error) throw fail(503, config.error);
     if (path.startsWith("/page/")) return await handlePage(res, path.slice("/page/".length), new URLSearchParams(search));
     throw fail(404, "Use /page/<name>, /page/<name>?palette=6c, /page/<name>.html or /page/<name>.debug");

@@ -34,5 +34,6 @@ export function loadConfig(env = process.env) {
     renderTimeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 30000,
     port: Number(env.PORT) || 8080,
     pagesDir: o.pages_dir || env.PAGES_DIR || "pages",
+    indexPage: !/^(false|0)$/i.test(String(o.index_page ?? env.INDEX_PAGE ?? "").trim()),
   };
 }

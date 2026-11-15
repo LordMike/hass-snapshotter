@@ -4,7 +4,7 @@ import { html } from "./html.js";
 
 const ms = (n) => n.toFixed(1);
 
-export function debugPage({ name, query, palettes, trace, result, error }) {
+export function debugPage({ name, query, palettes, trace, result, error, indexPage }) {
   const rows = [];
   let prev = trace.start;
   // Arrival order is the true order; the two processes' clocks can differ by a fraction of a ms.
@@ -39,7 +39,7 @@ tr.error { background: #ffd6d6; }
 pre { background: #f4f4f4; padding: 8px; overflow-x: auto; }
 img { border: 1px solid #ccc; max-width: 100%; }
 </style>
-<p><a href="../">all pages</a></p>
+${indexPage && html`<p><a href="../">all pages</a></p>`}
 <h1>${name}</h1>
 <p>Debug view: [ ${variants.map((v, i) => (i ? html` | ${v}` : v))} ] · <a href="${link("", current)}">png</a> · <a href="${link(".html")}">html</a></p>
 <p>${error ? html`<b>Failed (${error.status ?? 500}):</b> ${error.message}` : html`<b>OK</b>`} · ${ms(total)} ms · ${warnings.length} warning(s)</p>
