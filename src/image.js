@@ -73,9 +73,12 @@ function mapToInks(data, width, height, inks) {
   const n = width * height;
   const out = new Uint8Array(n);
   const exact = new Int8Array(n).fill(-1);
-  const keys = Int32Array.from(inks, ([r, g, b]) => (r << 16) | (g << 8) | b);
+  // Whole pixels as 32-bit words (alpha is 255 by now), compared with the
+  // inks' words built the same way, so this works on any byte order.
+  const keys = new Int32Array(Uint8Array.from(inks.flatMap(([r, g, b]) => [r, g, b, 255])).buffer);
+  const words = data.byteOffset % 4 ? new Int32Array(data.slice().buffer, 0, n) : new Int32Array(data.buffer, data.byteOffset, n);
   for (let p = 0; p < n; p++) {
-    const k = (data[p * 4] << 16) | (data[p * 4 + 1] << 8) | data[p * 4 + 2];
+    const k = words[p];
     for (let i = 0; i < keys.length; i++) {
       if (keys[i] === k) {
         exact[p] = i;
@@ -96,7 +99,8 @@ function mapToInks(data, width, height, inks) {
       near[row + x] = c;
     }
   }
-  const baseMask = (1 << keys.indexOf(0)) | (1 << keys.indexOf(0xffffff));
+  const inkIndex = (r, g, b) => inks.findIndex((ink) => ink[0] === r && ink[1] === g && ink[2] === b);
+  const baseMask = (1 << inkIndex(0, 0, 0)) | (1 << inkIndex(255, 255, 255));
 
   const rgb = Int32Array.from(inks.flat());
   const nearest = (p, mask, background) => {
