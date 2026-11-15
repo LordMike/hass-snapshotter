@@ -27,7 +27,28 @@ export function loadConfig(env = process.env) {
     }
   }
 
+  // Optional HTTP auth: Basic from username + password, or an exact Authorization header value.
+  const username = o.auth_username || env.AUTH_USERNAME || "";
+  const password = o.auth_password || env.AUTH_PASSWORD || "";
+  const header = String(o.auth_header || env.AUTH_HEADER || "").trim();
+  let authHeader = null;
+  let authBasic = false;
+  let authError = null; // refuses every request except /healthz, so a typo never leaves the server open
+  if (!username !== !password) {
+    authError = "Authentication is misconfigured: set auth_username and auth_password (AUTH_USERNAME, AUTH_PASSWORD) together";
+  } else if (header && username) {
+    authError = "Authentication is misconfigured: use either auth_username with auth_password, or auth_header, not both";
+  } else if (username) {
+    authHeader = "Basic " + Buffer.from(`${username}:${password}`, "utf8").toString("base64");
+    authBasic = true;
+  } else if (header) {
+    authHeader = header;
+  }
+
   return {
+    authHeader,
+    authBasic,
+    authError,
     error, // reported on every request instead of crashing at startup
     haBase,
     haToken,

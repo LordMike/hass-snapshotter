@@ -119,7 +119,13 @@ when something is off, `X-Render-Warnings`. Errors are plain text with the
 status: 400 bad name or parameter, 404 unknown page (lists the available
 ones), 500 page error (with page line and unknown entities), 502 Home
 Assistant unreachable or rejecting the token, 503 not configured or busy,
-504 render timeout. The endpoint has no authentication of its own.
+504 render timeout.
+
+Authentication is off by default. With `auth_username` and `auth_password`
+every request except `/healthz` needs HTTP Basic Auth; `auth_header` instead
+requires an exact `Authorization` value. Without it: 401. Invalid combinations
+answer 503 until fixed. HA integrations that fetch the image (e.g. a generic
+camera or image URL) need the same username and password.
 
 ## Configuration
 
@@ -128,6 +134,9 @@ Assistant unreachable or rejecting the token, 503 not configured or busy,
 | `pages_dir` | `PAGES_DIR` | `/homeassistant/dashboard-pages` (app), `./pages` | Folder with pages |
 | `render_timeout_ms` | `RENDER_TIMEOUT_MS` | `30000` | Maximum time for one render |
 | `index_page` | `INDEX_PAGE` | `true` | Serve the page list at `/`; `false` or `0` answers 404 there |
+| `auth_username` | `AUTH_USERNAME` | none | With the password: require HTTP Basic Auth on every request except `/healthz` |
+| `auth_password` | `AUTH_PASSWORD` | none | Password for Basic Auth; set together with the username |
+| `auth_header` | `AUTH_HEADER` | none | Instead of both: exact `Authorization` header value required, e.g. `Bearer <token>` |
 | `ha_url` | `HA_URL` | Supervisor (app) | **Optional in the HA app**: leave empty to use the built-in connection. Required for standalone Docker: Home Assistant base URL |
 | `ha_token` | `HA_TOKEN` | Supervisor (app) | **Optional in the HA app**: leave empty, no token needed. Required for standalone Docker: long-lived access token |
 

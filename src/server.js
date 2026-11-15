@@ -7,6 +7,7 @@ import { HassClient } from "./hass.js";
 import { NAME, listPages } from "./pages.js";
 import { PALETTES } from "./image.js";
 import { debugPage } from "./debug.js";
+import { checkAuth } from "./auth.js";
 
 const config = loadConfig();
 const MAX_WAITING = 8;
@@ -157,6 +158,13 @@ function index(res) {
 const server = http.createServer(async (req, res) => {
   try {
     const [path, search = ""] = req.url.split("?");
+    if (path !== "/healthz") {
+      if (config.authError) throw fail(503, config.authError);
+      if (!checkAuth(config.authHeader, req.headers.authorization)) {
+        if (config.authBasic) res.setHeader("WWW-Authenticate", 'Basic realm="hass-snapshotter", charset="UTF-8"');
+        throw fail(401, "Authentication required");
+      }
+    }
     if (req.method !== "GET") throw fail(405, "Only GET");
     if (path === "/healthz") return res.end("ok\n");
     if (path === "/") {
