@@ -29,7 +29,19 @@ const SYSTEM_FONTS = [
   { file: "/usr/share/fonts/liberation-sans-narrow/LiberationSansNarrow-Bold.ttf", names: ["Arial Narrow", "Liberation Sans Narrow"] },
 ];
 
-async function getRenderer(pagesDir) {
+// A kept worker process reuses the renderer (and its fonts); the server starts
+// a new process when the pages folder, including fonts/, changes.
+let rendererPromise = null;
+function getRenderer(pagesDir) {
+  const reused = rendererPromise !== null;
+  rendererPromise ??= createRenderer(pagesDir).catch((err) => {
+    rendererPromise = null; // try again on the next render
+    throw err;
+  });
+  return rendererPromise.then((r) => ({ ...r, reused }));
+}
+
+async function createRenderer(pagesDir) {
   const { Renderer } = await import("@takumi-rs/core");
   const renderer = new Renderer();
   const system = SYSTEM_FONTS.filter((f) => existsSync(f.file)).flatMap(({ file, names }) => {
@@ -156,8 +168,8 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   const [r, config] = await Promise.all([
     format === "html"
       ? null
-      : getRenderer(pagesDir).then(({ renderer, fonts }) => {
-          info(`Takumi ready, ${fonts} fonts registered`);
+      : getRenderer(pagesDir).then(({ renderer, fonts, reused }) => {
+          info(reused ? `Takumi reused, ${fonts} fonts registered` : `Takumi ready, ${fonts} fonts registered`);
           return renderer;
         }),
     client.getConfig().then((c) => {

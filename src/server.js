@@ -1,7 +1,7 @@
 import http from "node:http";
 import { fork } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { loadConfig } from "./config.js";
 import { HassClient } from "./hass.js";
 import { NAME, listPages } from "./pages.js";
@@ -42,11 +42,14 @@ function parseParams(q) {
   return { palette, params };
 }
 
-// Each render runs in a child process that exits afterwards, so the renderer,
-// fonts and icons are not held in memory between renders. One at a time keeps
-// peak memory to one child.
+// Renders run in a child process (src/page-worker.js), one at a time, so peak
+// memory is one child. By default the child exits after each render; with
+// renderer_keep_alive it stays for that many seconds and is reused, which
+// skips the process start, Takumi and font loading.
 let queue = Promise.resolve();
 let waiting = 0;
+let worker = null; // the kept child: { child, renders, stamp, job, idle }
+const MAX_RENDERS = 100; // a kept child is replaced after this many renders
 
 function render(name, params, trace) {
   if (waiting >= MAX_WAITING) throw fail(503, "Too many renders queued; try again shortly");
@@ -57,36 +60,98 @@ function render(name, params, trace) {
   return job;
 }
 
-function runChild(name, params, trace) {
-  trace.note("starting renderer process");
-  return new Promise((resolvePromise, reject) => {
-    const child = fork(new URL("./page-worker.js", import.meta.url), { serialization: "advanced" });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, config.renderTimeoutMs);
-    const done = () => clearTimeout(timer);
-    child.on("message", (msg) => {
-      if (msg.log) return trace.entries.push(msg.log);
-      done();
-      trace.note("result received from renderer process");
-      msg.ok ? resolvePromise(msg) : reject(Object.assign(fail(msg.status, msg.message), { stack: msg.stack }));
-    });
-    child.once("error", (err) => {
-      done();
-      reject(fail(500, `Cannot start the renderer: ${err.message}`));
-    });
-    child.once("exit", (code, signal) => {
-      done();
-      reject(
-        timedOut
-          ? fail(504, `Rendering ${name} took longer than render_timeout_ms (${config.renderTimeoutMs} ms)`)
-          : fail(500, `Renderer for ${name} stopped unexpectedly (${signal ?? `exit ${code}`}); see the log`),
-      );
-    });
-    child.send({ config, name, params, haConfig, haConfigAt });
+// Newest change time of the pages folder, its files and fonts/. Page modules
+// cannot be unloaded and fonts are registered once, so a changed folder means
+// a new child.
+function pagesStamp() {
+  const dir = resolve(config.pagesDir);
+  let newest = 0;
+  for (const d of [dir, join(dir, "fonts")]) {
+    try {
+      const files = readdirSync(d, { withFileTypes: true }).filter((e) => e.isFile());
+      newest = Math.max(newest, statSync(d).mtimeMs, ...files.map((e) => statSync(join(d, e.name)).mtimeMs));
+    } catch {} // folder missing or a file vanished: the render reports it
+  }
+  return newest;
+}
+
+function stopWorker(w, why) {
+  if (worker === w) worker = null;
+  clearTimeout(w.idle);
+  console.log(`renderer process ended (${why}) after ${w.renders} renders`);
+  w.child.kill("SIGKILL");
+}
+
+function startWorker() {
+  const child = fork(new URL("./page-worker.js", import.meta.url), { serialization: "advanced" });
+  const w = { child, renders: 0, stamp: pagesStamp(), job: null, idle: null };
+  // One set of listeners per child; log lines and the result go to the current job.
+  const finish = (error, msg) => {
+    const job = w.job;
+    if (!job) return;
+    w.job = null;
+    clearTimeout(job.timer);
+    error ? job.reject(error) : job.resolve(msg);
+  };
+  child.on("message", (msg) => {
+    if (msg.log) return w.job?.trace.entries.push(msg.log);
+    w.job?.trace.note("result received from renderer process");
+    finish(msg.ok ? null : Object.assign(fail(msg.status, msg.message), { stack: msg.stack }), msg);
   });
+  child.on("error", (err) => finish(fail(500, `Cannot start the renderer: ${err.message}`)));
+  child.on("exit", (code, signal) => {
+    const how = signal ?? `exit ${code}`;
+    if (worker === w) {
+      worker = null;
+      clearTimeout(w.idle);
+      if (!w.job) console.log(`renderer process exited while idle (${how})`);
+    }
+    const name = w.job?.name;
+    finish(
+      w.job?.timedOut
+        ? fail(504, `Rendering ${name} took longer than render_timeout_ms (${config.renderTimeoutMs} ms)`)
+        : fail(500, `Renderer for ${name} stopped unexpectedly (${how}); see the log`),
+    );
+  });
+  return w;
+}
+
+async function runChild(name, params, trace) {
+  let w = worker;
+  let how = "starting renderer process";
+  if (w) {
+    clearTimeout(w.idle);
+    const why = w.renders >= MAX_RENDERS ? `${MAX_RENDERS} renders done` : pagesStamp() !== w.stamp ? "pages changed" : null;
+    if (why) {
+      stopWorker(w, `recycled: ${why}`);
+      w = null;
+      how = `starting renderer process (${why})`;
+    } else {
+      how = `reusing renderer process (render ${w.renders + 1})`;
+    }
+  }
+  trace.note(how);
+  w ??= startWorker();
+  const keep = config.keepAliveSeconds > 0;
+  if (keep) worker = w; // otherwise the child exits on its own after this render
+
+  try {
+    const result = await new Promise((resolvePromise, reject) => {
+      const job = { name, trace, resolve: resolvePromise, reject, timedOut: false, timer: null };
+      job.timer = setTimeout(() => {
+        job.timedOut = true;
+        w.child.kill("SIGKILL");
+      }, config.renderTimeoutMs);
+      w.job = job;
+      w.child.send({ config, name, params, haConfig, haConfigAt, keep });
+    });
+    result.process = how;
+    return result;
+  } finally {
+    w.renders++;
+    // A failed page leaves the child usable; a killed or crashed one is already gone.
+    if (worker === w) w.idle = setTimeout(() => stopWorker(w, `idle for ${config.keepAliveSeconds} s`), config.keepAliveSeconds * 1000);
+  }
 }
 
 async function handlePage(res, file, query) {
@@ -118,11 +183,12 @@ async function sendPage(res, name, format, query, trace) {
   result.timings.total = Date.now() - started;
   const timings = Object.entries(result.timings).map(([k, v]) => `${k}=${v}`).join(";");
   const warnings = result.warnings.join("; ");
-  console.log(`page ${name} ${timings} entities=${result.ids.length}${warnings ? ` warnings: ${warnings}` : ""}`);
+  console.log(`page ${name} ${timings} ${result.process} entities=${result.ids.length}${warnings ? ` warnings: ${warnings}` : ""}`);
 
   const headers = {
     "Cache-Control": "no-store",
     "X-Render-Timings": timings,
+    "X-Render-Process": result.process,
     "X-Render-Entities": result.ids.join(","),
     ...(warnings && { "X-Render-Warnings": warnings }),
   };
@@ -197,6 +263,7 @@ server.listen(config.port, () => {
 for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
     server.close();
+    worker?.child.kill("SIGKILL");
     process.exit(0);
   });
 }

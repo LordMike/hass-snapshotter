@@ -13,6 +13,8 @@ export function loadConfig(env = process.env) {
   const haToken = o.ha_token || env.HA_TOKEN || supervisor;
   const timeout = Number(o.render_timeout_ms ?? env.RENDER_TIMEOUT_MS);
 
+  const keepAlive = Number(o.renderer_keep_alive ?? env.RENDERER_KEEP_ALIVE);
+
   let haBase = null;
   let error = null;
   if (!haUrl || !haToken) {
@@ -53,6 +55,7 @@ export function loadConfig(env = process.env) {
     haBase,
     haToken,
     renderTimeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : 30000,
+    keepAliveSeconds: Number.isInteger(keepAlive) && keepAlive > 0 ? Math.min(keepAlive, 86400) : 0,
     port: Number(env.PORT) || 8080,
     pagesDir: o.pages_dir || env.PAGES_DIR || "pages",
     indexPage: !/^(false|0)$/i.test(String(o.index_page ?? env.INDEX_PAGE ?? "").trim()),

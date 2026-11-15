@@ -133,6 +133,7 @@ camera or image URL) need the same username and password.
 |---|---|---|---|
 | `pages_dir` | `PAGES_DIR` | `/homeassistant/dashboard-pages` (app), `./pages` | Folder with pages |
 | `render_timeout_ms` | `RENDER_TIMEOUT_MS` | `30000` | Maximum time for one render |
+| `renderer_keep_alive` | `RENDERER_KEEP_ALIVE` | `0` | Seconds to keep the renderer process after a render and reuse it (0 to 86400). `0` starts a fresh process per render: lowest idle memory. Kept: faster renders, about 85 MB more memory while kept; only helps if renders come more often than this. HA states are fetched on every render; the process is replaced after 100 renders or when the pages folder changes |
 | `index_page` | `INDEX_PAGE` | `true` | Serve the page list at `/`; `false` or `0` answers 404 there |
 | `auth_username` | `AUTH_USERNAME` | none | With the password: require HTTP Basic Auth on every request except `/healthz` |
 | `auth_password` | `AUTH_PASSWORD` | none | Password for Basic Auth; set together with the username |
