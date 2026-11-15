@@ -104,11 +104,18 @@ async function handlePage(res, file, query) {
 
 function index(res) {
   const pages = listPages(config.pagesDir);
-  const rows = pages.map((p) => `<li><a href="page/${p}">${p}</a> · <a href="page/${p}?palette=6c">6c</a> · <a href="page/${p}.html">html</a></li>`);
+  const palettes = (p) => Object.keys(PALETTES).map((n) => `<a href="page/${p}?palette=${n}">${n}</a>`).join(" | ");
+  const rows = pages.map(
+    (p) => `<tr><td>${p}</td><td><a href="page/${p}">png</a></td><td>[ ${palettes(p)} ]</td><td><a href="page/${p}.html">html</a></td></tr>`,
+  );
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(
-    `<!doctype html><meta charset="utf-8"><title>hass-snapshotter</title><h1>hass-snapshotter</h1>` +
-      `<p>Pages in <code>${config.pagesDir}</code>:</p><ul>${rows.join("") || "<li>none yet</li>"}</ul>`,
+    `<!doctype html><meta charset="utf-8"><title>hass-snapshotter</title>` +
+      `<style>th,td{text-align:left;padding:2px 12px 2px 0}</style><h1>hass-snapshotter</h1>` +
+      `<p>Pages in <code>${config.pagesDir}</code>:</p>` +
+      (rows.length
+        ? `<table><thead><tr><th>Page</th><th>Full color</th><th>Color palette</th><th>Markup</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+        : "<p>None yet.</p>"),
   );
 }
 
