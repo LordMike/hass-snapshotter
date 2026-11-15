@@ -41,14 +41,26 @@ export function applyPalette(rgba, width, height, name) {
   return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
 }
 
+// RGBA pixels as 32-bit words, without copying when the bytes are aligned.
+const pixelWords = (data, n) =>
+  data.byteOffset % 4 ? new Int32Array(data.slice().buffer, 0, n) : new Int32Array(data.buffer, data.byteOffset, n);
+
 // Each pixel takes the nearest grey level by luminance; anti-aliased edges stay
 // soft greys instead of being cut to black or white.
 function grayPng(rgba, width, height, levels) {
   const inks = Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))));
   const out = new Uint8Array(width * height);
+  const words = pixelWords(rgba, out.length);
+  // Flat UI repeats colours in long runs: reuse the previous pixel's level.
+  let last = 0;
+  let level = 0;
   for (let p = 0; p < out.length; p++) {
-    const luma = 0.299 * rgba[p * 4] + 0.587 * rgba[p * 4 + 1] + 0.114 * rgba[p * 4 + 2];
-    out[p] = Math.round((luma * (levels - 1)) / 255);
+    if (p === 0 || words[p] !== last) {
+      last = words[p];
+      const luma = 0.299 * rgba[p * 4] + 0.587 * rgba[p * 4 + 1] + 0.114 * rgba[p * 4 + 2];
+      level = Math.round((luma * (levels - 1)) / 255);
+    }
+    out[p] = level;
   }
   return indexedPng(out, width, height, inks);
 }
@@ -76,7 +88,7 @@ function mapToInks(data, width, height, inks) {
   // Whole pixels as 32-bit words (alpha is 255 by now), compared with the
   // inks' words built the same way, so this works on any byte order.
   const keys = new Int32Array(Uint8Array.from(inks.flatMap(([r, g, b]) => [r, g, b, 255])).buffer);
-  const words = data.byteOffset % 4 ? new Int32Array(data.slice().buffer, 0, n) : new Int32Array(data.buffer, data.byteOffset, n);
+  const words = pixelWords(data, n);
   for (let p = 0; p < n; p++) {
     const k = words[p];
     for (let i = 0; i < keys.length; i++) {
