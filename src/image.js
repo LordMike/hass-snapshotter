@@ -73,10 +73,17 @@ function mapToInks(data, width, height, inks) {
   const n = width * height;
   const out = new Uint8Array(n);
   const exact = new Int8Array(n).fill(-1);
-  const key = (r, g, b) => (r << 16) | (g << 8) | b;
-  const inkOf = new Map(inks.map(([r, g, b], i) => [key(r, g, b), i]));
-  for (let p = 0; p < n; p++) exact[p] = inkOf.get(key(data[p * 4], data[p * 4 + 1], data[p * 4 + 2])) ?? -1;
-  const baseMask = (1 << inkOf.get(key(0, 0, 0))) | (1 << inkOf.get(key(255, 255, 255)));
+  const keys = Int32Array.from(inks, ([r, g, b]) => (r << 16) | (g << 8) | b);
+  for (let p = 0; p < n; p++) {
+    const k = (data[p * 4] << 16) | (data[p * 4 + 1] << 8) | data[p * 4 + 2];
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i] === k) {
+        exact[p] = i;
+        break;
+      }
+    }
+  }
+  const baseMask = (1 << keys.indexOf(0)) | (1 << keys.indexOf(0xffffff));
 
   const rgb = Int32Array.from(inks.flat());
   const nearest = (p, mask, background) => {
