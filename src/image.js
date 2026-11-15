@@ -1,6 +1,5 @@
 // Maps rendered RGBA pixels onto an e-paper panel's inks and writes an indexed PNG.
 import { readFileSync } from "node:fs";
-import { deflateSync, crc32, constants } from "node:zlib";
 
 const INKS = {
   white: [255, 255, 255],
@@ -23,9 +22,12 @@ const GRAY_LEVELS = { gray4: 4, gray16: 16 };
 
 export const PALETTES = { ...INK_PALETTES, ...GRAY_LEVELS };
 
-// The pixel loops are Rust, built for WebAssembly with SIMD (native/palette,
-// `sh native/palette/build.sh`); compiled on first use. It holds one buffer, sized for
-// the largest image so far.
+// The pixel loops and the PNG writer (deflate included) are Rust, built for
+// WebAssembly with SIMD (native/palette, `sh native/palette/build.sh`);
+// compiled on first use. It holds one buffer, sized for the largest image so
+// far: up to 16 colour words at +0, the RGBA pixels at +PIXELS (64 colour bytes
+// and SCAN_LEAD in lib.rs).
+const PIXELS = 128;
 let kernel = null;
 function palettes() {
   if (kernel) return kernel;
@@ -72,52 +74,24 @@ export function applyPalette(rgba, width, height, name, log = () => {}) {
   const compile = !kernel;
   const k = palettes();
   if (compile) step("wasm compiled");
+  // Room for everything, the PNG included, so memory does not grow (and `mem`
+  // stays valid) until the next prepare.
   const base = k.prepare(width, height);
   step("buffer");
   const mem = new Uint8Array(k.memory.buffer);
-  mem.set(rgba.subarray(0, width * height * 4), base + 32);
+  mem.set(rgba.subarray(0, width * height * 4), base + PIXELS);
   step("pixels copied");
-  let inks;
-  let rows;
-  if (name in GRAY_LEVELS) {
-    const levels = GRAY_LEVELS[name];
-    inks = Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))));
-    rows = k.map_gray(width, height, levels);
-  } else {
-    inks = INK_PALETTES[name].map((ink) => INKS[ink]);
-    mem.set(inks.flatMap(([r, g, b]) => [r, g, b, 255]), base);
-    rows = k.map_inks(width, height, inks.length);
-  }
+  const levels = GRAY_LEVELS[name];
+  const colors = levels
+    ? Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))))
+    : INK_PALETTES[name].map((ink) => INKS[ink]);
+  mem.set(colors.flatMap(([r, g, b]) => [r, g, b, 255]), base);
+  const rows = levels ? k.map_gray(width, height, levels) : k.map_inks(width, height, colors.length);
   step("mapped");
-  const png = indexedPng(mem.subarray(rows, rows + (width + 1) * height), width, height, inks);
-  step("PNG (deflate)");
+  // The kernel writes the PNG after the scanlines; copy it out of its memory.
+  const at = rows + (width + 1) * height;
+  const png = Buffer.from(mem.subarray(at, at + k.png(width, height, colors.length)));
+  step("PNG");
   log(`palette ${name}: ${steps.join(", ")}`);
   return png;
-}
-
-// Minimal 8-bit indexed PNG: IHDR, PLTE with the inks, one IDAT, IEND.
-// `rows` are the scanlines: filter byte 0, then one index per pixel.
-function indexedPng(rows, width, height, inks) {
-  const chunk = (type, data) => {
-    const out = Buffer.alloc(12 + data.length);
-    out.writeUInt32BE(data.length, 0);
-    out.write(type, 4, "ascii");
-    data.copy(out, 8);
-    out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length);
-    return out;
-  };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr.set([8, 3, 0, 0, 0], 8); // bit depth 8, colour type 3 (palette)
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", ihdr),
-    chunk("PLTE", Buffer.from(inks.flat())),
-    // Run-length matching only: flat UI rows compress 6-7x faster than with
-    // the default, for files about a quarter larger.
-    chunk("IDAT", deflateSync(rows, { strategy: constants.Z_RLE })),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
 }
