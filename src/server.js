@@ -6,6 +6,7 @@ import { loadConfig } from "./config.js";
 import { HassClient } from "./hass.js";
 import { NAME, listPages } from "./pages.js";
 import { PALETTES } from "./image.js";
+import { debugPage } from "./debug.js";
 
 const config = loadConfig();
 const MAX_WAITING = 8;
@@ -14,6 +15,15 @@ let haConfig = null; // HA's /api/config, reused across renders for an hour
 let haConfigAt = 0;
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
+const now = () => performance.timeOrigin + performance.now();
+
+// A request's verbose log, shown on the debug page: { t, level, text } with
+// t in epoch ms, from this process and the renderer process.
+function newTrace() {
+  const trace = { start: now(), entries: [] };
+  trace.note = (text, level = "info") => trace.entries.push({ t: now(), level, text });
+  return trace;
+}
 
 // `palette` is the server's own; every other query parameter is passed to the
 // page as ctx.params (strings, last value wins).
@@ -37,15 +47,17 @@ function parseParams(q) {
 let queue = Promise.resolve();
 let waiting = 0;
 
-function render(name, params) {
+function render(name, params, trace) {
   if (waiting >= MAX_WAITING) throw fail(503, "Too many renders queued; try again shortly");
+  if (waiting) trace.note(`waiting for ${waiting} render(s) ahead in the queue`);
   waiting++;
-  const job = queue.then(() => runChild(name, params)).finally(() => waiting--);
+  const job = queue.then(() => runChild(name, params, trace)).finally(() => waiting--);
   queue = job.catch(() => {});
   return job;
 }
 
-function runChild(name, params) {
+function runChild(name, params, trace) {
+  trace.note("starting renderer process");
   return new Promise((resolvePromise, reject) => {
     const child = fork(new URL("./page-worker.js", import.meta.url), { serialization: "advanced" });
     let timedOut = false;
@@ -54,9 +66,11 @@ function runChild(name, params) {
       child.kill("SIGKILL");
     }, config.renderTimeoutMs);
     const done = () => clearTimeout(timer);
-    child.once("message", (msg) => {
+    child.on("message", (msg) => {
+      if (msg.log) return trace.entries.push(msg.log);
       done();
-      msg.ok ? resolvePromise(msg) : reject(fail(msg.status, msg.message));
+      trace.note("result received from renderer process");
+      msg.ok ? resolvePromise(msg) : reject(Object.assign(fail(msg.status, msg.message), { stack: msg.stack }));
     });
     child.once("error", (err) => {
       done();
@@ -75,12 +89,30 @@ function runChild(name, params) {
 }
 
 async function handlePage(res, file, query) {
-  const format = file.endsWith(".html") ? "html" : "png";
-  const name = file.replace(/\.(html|png)$/, "");
+  const kind = /\.(html|debug)$/.exec(file)?.[1] ?? "png";
+  const name = file.replace(/\.(html|png|debug)$/, "");
   if (!NAME.test(name)) throw fail(400, `Page name "${name}" not allowed: use a-z, 0-9, - and _`);
+  const trace = newTrace();
+  trace.note(`request for ${file}${query.size ? "?" + query : ""}`);
+  if (kind !== "debug") return sendPage(res, name, kind, query, trace);
+  // The debug page renders the PNG too, and shows the log even when the render fails.
+  let result = null;
+  let error = null;
+  try {
+    result = await sendPage(null, name, "png", query, trace);
+  } catch (err) {
+    error = err;
+    trace.note(err.message, "error");
+  }
+  res.writeHead(error?.status ?? 200, { "Cache-Control": "no-store", "Content-Type": "text/html; charset=utf-8" });
+  res.end(debugPage({ name, query, palettes: Object.keys(PALETTES), trace, result, error }));
+}
+
+// Renders a page; writes it to `res` if given, and returns the result.
+async function sendPage(res, name, format, query, trace) {
   const params = { ...parseParams(query), format };
   const started = Date.now();
-  const result = await render(name, params);
+  const result = await render(name, params, trace);
   ({ haConfig, haConfigAt } = result);
   result.timings.total = Date.now() - started;
   const timings = Object.entries(result.timings).map(([k, v]) => `${k}=${v}`).join(";");
@@ -93,20 +125,23 @@ async function handlePage(res, file, query) {
     "X-Render-Entities": result.ids.join(","),
     ...(warnings && { "X-Render-Warnings": warnings }),
   };
+  if (!res) return result;
   if (format === "html") {
     res.writeHead(200, { ...headers, "Content-Type": "text/html; charset=utf-8" });
-    return res.end(`<!doctype html><meta charset="utf-8"><body style="margin:0">${result.markup}`);
+    res.end(`<!doctype html><meta charset="utf-8"><body style="margin:0">${result.markup}`);
+    return result;
   }
   const png = Buffer.from(result.png);
   res.writeHead(200, { ...headers, "Content-Type": "image/png", "Content-Length": png.length });
   res.end(png);
+  return result;
 }
 
 function index(res) {
   const pages = listPages(config.pagesDir);
   const palettes = (p) => Object.keys(PALETTES).map((n) => `<a href="page/${p}?palette=${n}">${n}</a>`).join(" | ");
   const rows = pages.map(
-    (p) => `<tr><td>${p}</td><td><a href="page/${p}">png</a></td><td>[ ${palettes(p)} ]</td><td><a href="page/${p}.html">html</a></td></tr>`,
+    (p) => `<tr><td>${p}</td><td><a href="page/${p}">png</a></td><td>[ ${palettes(p)} ]</td><td><a href="page/${p}.html">html</a></td><td><a href="page/${p}.debug">debug</a></td></tr>`,
   );
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(
@@ -114,7 +149,7 @@ function index(res) {
       `<style>th,td{text-align:left;padding:2px 12px 2px 0}</style><h1>hass-snapshotter</h1>` +
       `<p>Pages in <code>${config.pagesDir}</code>:</p>` +
       (rows.length
-        ? `<table><thead><tr><th>Page</th><th>Full color</th><th>Color palette</th><th>Markup</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+        ? `<table><thead><tr><th>Page</th><th>Full color</th><th>Color palette</th><th>Markup</th><th>Troubleshoot</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
         : "<p>None yet.</p>"),
   );
 }
@@ -127,7 +162,7 @@ const server = http.createServer(async (req, res) => {
     if (path === "/") return index(res);
     if (config.error) throw fail(503, config.error);
     if (path.startsWith("/page/")) return await handlePage(res, path.slice("/page/".length), new URLSearchParams(search));
-    throw fail(404, "Use /page/<name>, /page/<name>?palette=6c or /page/<name>.html");
+    throw fail(404, "Use /page/<name>, /page/<name>?palette=6c, /page/<name>.html or /page/<name>.debug");
   } catch (err) {
     const status = err.status ?? 500;
     console.log(`error ${status} ${req.url}: ${err.message}`);

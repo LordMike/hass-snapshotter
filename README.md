@@ -57,7 +57,8 @@ export default function render(hass, { html, raw, mdi, now, timeZone, locale, pa
 - The default export is called for every render and returns markup.
 - `hass.states` works like the frontend's: the page reads what it needs, and
   all states are fetched in one request. Unknown entities read as `undefined` and are
-  listed in the `X-Render-Warnings` response header and the log.
+  listed on the debug page (`/page/<name>.debug`), in the `X-Render-Warnings`
+  response header and in the log.
   `hass.config` is HA's `/api/config`.
 - `hass.areas[area_id]` (`{ area_id, name }`) and `hass.entities[entity_id]`
   (`{ entity_id, area_id }`) work like the frontend's, except that an
@@ -110,6 +111,7 @@ letters, digits, `-` and `_`; at most 20 parameters of up to 500 characters.
 | `GET /page/<name>?palette=gray4` | PNG in grey levels for greyscale panels: `gray4` (black, dark grey, light grey, white) or `gray16`. Each pixel takes the nearest grey, so anti-aliased edges stay smooth |
 | `GET /page/<name>?key=value` | Any other parameter goes to the page as `ctx.params` (see URL parameters) |
 | `GET /page/<name>.html` | The page's markup, for debugging layout in a browser |
+| `GET /page/<name>.debug` | Renders the PNG (same parameters, including `palette`) and shows a log of every step with the time since the request started, warnings, errors with their stack, the entities read and the image. Start here when a page is slow or wrong |
 | `GET /healthz` | `ok` |
 
 Responses carry `X-Render-Timings` (ms per phase), `X-Render-Entities` and,

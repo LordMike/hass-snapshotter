@@ -28,6 +28,6 @@ hass-snapshotter renders Home Assistant data to PNG images for e-paper displays,
 ## Repo conventions
 
 - `src/server.js`: HTTP, parameters, queue, child lifecycle. `src/page-worker.js`: one render per child process.
-- `src/pages.js`: page loading, `hass`/ctx, Takumi. `src/hass.js`: REST client. `src/image.js`: palette mapping and indexed PNG. `src/html.js`: escaping template tag.
+- `src/pages.js`: page loading, `hass`/ctx, Takumi. `src/hass.js`: REST client. `src/image.js`: palette mapping and indexed PNG. `src/html.js`: escaping template tag. `src/debug.js`: the `.debug` page (request log, warnings, image).
 - `pages/`: example pages (also the default `PAGES_DIR` outside the app). They are not baked into the image.
 - Node ESM, Node 22.2+; no build step.

@@ -53,19 +53,22 @@ async function getRenderer(pagesDir) {
       }),
     ),
   ]);
-  return renderer;
+  return { renderer, fonts: system.length + fonts.length };
 }
 
 // mdi("mdi:weather-cloudy", { size: 48, color: "#000" }) -> inline SVG.
 // The icon set (2.8 MB) is only loaded if a page uses an icon.
-function mdiHelper(warnings) {
+function mdiHelper(warn, log) {
   let paths = null;
   return (name, { size = 24, color = "currentColor" } = {}) => {
-    paths ??= require("@mdi/js");
+    if (!paths) {
+      paths = require("@mdi/js");
+      log("icon set loaded");
+    }
     const key = "mdi" + String(name).replace(/^mdi:/, "").replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
     const d = paths[key];
     if (!d) {
-      warnings.add(`unknown icon ${name}`);
+      warn(`unknown icon ${name}`);
       return raw("");
     }
     return raw(`<svg width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${color}" d="${d}"/></svg>`);
@@ -124,9 +127,17 @@ function lineOf(err, name) {
 /**
  * Renders a page module.
  * @param {"png"|"html"} format "html" returns the markup instead of an image
+ * @param {(level: "info"|"warn", text: string) => void} [log] verbose steps, for the debug page
  * @returns {Promise<{png?: Buffer, markup?: string, timings: Record<string, number>, ids: string[], warnings: string[]}>}
  */
-export async function renderPageModule({ pagesDir, client }, name, { palette, format, params = {} }) {
+export async function renderPageModule({ pagesDir, client }, name, { palette, format, params = {} }, log = () => {}) {
+  const info = (text) => log("info", text);
+  const warnings = new Set();
+  const warn = (text) => {
+    if (warnings.has(text)) return;
+    warnings.add(text);
+    log("warn", text);
+  };
   const timings = {};
   let last = Date.now();
   const mark = (k) => {
@@ -136,13 +147,24 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   };
 
   const page = await loadPage(pagesDir, name);
+  info(`${name}.js loaded`);
   checkParams(page, name, params);
   const [w, h] = pageSize(page, name, params);
+  info(`size ${w}x${h}, parameters ${JSON.stringify(params)}`);
   // States are fetched in parallel with loading the renderer and fonts.
+  const configCached = !!client.config;
   const [r, config] = await Promise.all([
-    format === "html" ? null : getRenderer(pagesDir),
-    client.getConfig(),
-    client.fetchStates([], {}),
+    format === "html"
+      ? null
+      : getRenderer(pagesDir).then(({ renderer, fonts }) => {
+          info(`Takumi ready, ${fonts} fonts registered`);
+          return renderer;
+        }),
+    client.getConfig().then((c) => {
+      info(configCached ? "HA config reused from an earlier render" : `HA config fetched (HA ${c.version}, ${c.time_zone}, ${c.language})`);
+      return c;
+    }),
+    client.fetchStates([], {}).then(() => info(`HA states fetched (${client.all.size} entities)`)),
   ]);
   mark("load");
 
@@ -156,11 +178,10 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
     return Object.freeze(Object.create(null));
   };
 
-  const warnings = new Set();
   const ctx = {
     html,
     raw,
-    mdi: mdiHelper(warnings),
+    mdi: mdiHelper(warn, info),
     now: new Date(),
     timeZone: config.time_zone,
     locale: config.language,
@@ -190,6 +211,12 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
       error = err; // often just data that isn't fetched yet
     }
     mark("template");
+    info(
+      `render() pass ${pass}: read ${read.size} entities` +
+        (missing.size ? `, ${missing.size} not fetched yet` : "") +
+        (wantsRegistry && !registry ? ", wants areas" : "") +
+        (error ? `, threw: ${error.message}` : ""),
+    );
     const needRegistry = wantsRegistry && !registry;
     if (missing.size === 0 && !needRegistry) {
       if (error) {
@@ -199,22 +226,32 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
       break;
     }
     if (pass === MAX_PASSES) throw fail(500, `${name}.js still reads new entities after ${MAX_PASSES} passes: ${[...missing].join(", ") || "(areas)"}`);
-    await Promise.all([client.fetchStates(missing, fetched), needRegistry && client.fetchAreas().then((r) => (registry = r))]);
+    await Promise.all([
+      client.fetchStates(missing, fetched),
+      needRegistry &&
+        client.fetchAreas().then((r) => {
+          registry = r;
+          info(`areas fetched (${Object.keys(r.areas).length} areas)`);
+        }),
+    ]);
     mark("fetch");
   }
-  for (const id of read) if (fetched[id] === null) warnings.add(`entity not found: ${id}`);
+  for (const id of read) if (fetched[id] === null) warn(`entity not found: ${id}`);
   const result = { timings, ids: [...read], warnings: [...warnings] };
   if (format === "html") return { ...result, markup };
 
   if (!palette) {
     result.png = await r.render(markup, { width: w, height: h });
     mark("render");
+    info(`Takumi rendered ${markup.length} characters of markup to a ${result.png.length} byte PNG`);
     return result;
   }
   const rgba = await r.render(markup, { width: w, height: h, format: "raw" });
   mark("render");
+  info(`Takumi rendered ${markup.length} characters of markup to ${w}x${h} pixels`);
   const { applyPalette } = await import("./image.js");
   result.png = applyPalette(rgba, w, h, palette);
   mark("palette");
+  info(`palette ${palette} applied, ${result.png.length} byte PNG`);
   return result;
 }
