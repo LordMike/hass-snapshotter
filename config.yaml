@@ -15,6 +15,8 @@ ports:
   8080/tcp: 10010
 ports_description:
   8080/tcp: Render endpoint for browsers and other hosts. HA itself can use http://<app hostname>:8080
+# "Open Web UI" on the app page.
+webui: "http://[HOST]:[PORT:8080]/"
 options:
   pages_dir: /homeassistant/dashboard-pages
   render_timeout_ms: 30000
