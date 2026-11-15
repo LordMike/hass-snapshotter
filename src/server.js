@@ -49,7 +49,6 @@ function parseParams(q) {
 let queue = Promise.resolve();
 let waiting = 0;
 let worker = null; // the kept child: { child, renders, stamp, job, idle }
-const MAX_RENDERS = 100; // a kept child is replaced after this many renders
 
 function render(name, params, trace) {
   if (waiting >= MAX_WAITING) throw fail(503, "Too many renders queued; try again shortly");
@@ -121,7 +120,7 @@ async function runChild(name, params, trace) {
   let how = "starting renderer process";
   if (w) {
     clearTimeout(w.idle);
-    const why = w.renders >= MAX_RENDERS ? `${MAX_RENDERS} renders done` : pagesStamp() !== w.stamp ? "pages changed" : null;
+    const why = pagesStamp() !== w.stamp ? "pages changed" : null;
     if (why) {
       stopWorker(w, `recycled: ${why}`);
       w = null;
