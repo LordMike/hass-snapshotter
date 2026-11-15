@@ -28,7 +28,15 @@ export const PALETTES = { ...INK_PALETTES, ...GRAY_LEVELS };
 // the largest image so far.
 let kernel = null;
 function palettes() {
-  kernel ??= new WebAssembly.Instance(new WebAssembly.Module(readFileSync(new URL("./palette.wasm", import.meta.url)))).exports;
+  if (kernel) return kernel;
+  const file = new URL("./palette.wasm", import.meta.url);
+  let bytes;
+  try {
+    bytes = readFileSync(file);
+  } catch (err) {
+    throw new Error(`${err.code === "ENOENT" ? "src/palette.wasm is missing" : err.message}: build it with \`sh native/palette/build.sh\``);
+  }
+  kernel = new WebAssembly.Instance(new WebAssembly.Module(bytes)).exports;
   return kernel;
 }
 

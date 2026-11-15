@@ -1,0 +1,6 @@
+# One Rust version for CI, the Docker build and native/palette/build.sh
+# (keep the rust:<version>-alpine tags in Dockerfile and build.sh the same).
+[toolchain]
+channel = "1.100.0"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

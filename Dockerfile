@@ -1,3 +1,10 @@
+# The palette kernel (native/palette): Rust compiled to WebAssembly. The .wasm
+# is the same for every platform; the version matches rust-toolchain.toml.
+FROM rust:1.100.0-alpine AS wasm
+WORKDIR /src
+COPY native/palette ./
+RUN cargo build --release
+
 FROM alpine:3.23
 
 # Alpine's Node (49 MB vs 126 MB for the official binary). icu-data-full is
@@ -20,6 +27,7 @@ RUN apk add --no-cache nodejs icu-data-full font-liberation font-liberation-sans
     && apk del .build \
     && rm -rf /root/.npm /tmp/*
 COPY src ./src
+COPY --from=wasm /src/target/wasm32-unknown-unknown/release/palette.wasm ./src/
 
 # CI passes the release version (or "dev"); HA builds pass the app version.
 ARG BUILD_VERSION=local

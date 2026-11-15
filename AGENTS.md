@@ -20,7 +20,7 @@ hass-snapshotter renders Home Assistant data to PNG images for e-paper displays,
 
 ## Core workflows
 
-- Test: `npm test`
+- Test: `sh native/palette/build.sh` once (and after changing `native/palette`), then `npm test`
 - Build: `docker build -t hass-snapshotter .`
 - Run: `node --env-file=.tmp/dev.env src/server.js` DO NOT RUN AUTOMATICALLY UNLESS ASKED TO
 - Release: push a plain version tag (`0.4.0`, no `v`); CI publishes `ghcr.io/lordmike/hass-snapshotter` (amd64, arm64) and bumps `LordMike/hass-addons`.
@@ -30,4 +30,4 @@ hass-snapshotter renders Home Assistant data to PNG images for e-paper displays,
 - `src/server.js`: HTTP, parameters, queue, child lifecycle. `src/page-worker.js`: one render per child process.
 - `src/pages.js`: page loading, `hass`/ctx, Takumi. `src/hass.js`: REST client. `src/image.js`: palette rules, wasm glue and indexed PNG. `src/html.js`: escaping template tag. `src/debug.js`: the `.debug` page (request log, warnings, image).
 - `pages/`: example pages (also the default `PAGES_DIR` outside the app). They are not baked into the image.
-- Node ESM, Node 22.2+; no build step for the JS. `native/palette`: the palette pixel loops in Rust; `sh native/palette/build.sh` (Docker) rebuilds the committed `src/palette.wasm` (WebAssembly SIMD, same code on amd64 and arm64). Check changes with `node bench/palette.js`, which compares every output with the run saved by `--save`.
+- Node ESM, Node 22.2+. `native/palette`: the palette pixel loops in Rust, built to `src/palette.wasm` (WebAssembly SIMD, the same file on amd64 and arm64) by `sh native/palette/build.sh` (local cargo, else Docker), the CI build action and the Dockerfile; the .wasm is not committed. Check kernel changes with `node bench/palette.js`, which compares every output with the run saved by `--save`.

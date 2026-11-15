@@ -40,6 +40,6 @@ dist/
 build/
 *.egg-info/
 
-# Rust build output (src/palette.wasm is the committed result)
+# Rust build output; src/palette.wasm is built by native/palette/build.sh, CI and the Dockerfile
 native/palette/target/
-native/palette/Cargo.lock
+src/palette.wasm

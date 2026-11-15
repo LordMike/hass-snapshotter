@@ -10,5 +10,6 @@ translations
 pages
 *.md
 LICENSE.txt
-native
+native/palette/target
 bench
+src/palette.wasm

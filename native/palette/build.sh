@@ -1,10 +1,14 @@
 #!/bin/sh
-# Builds src/palette.wasm from this crate in Docker (no local Rust needed):
+# Builds src/palette.wasm, which is not committed: CI and the Dockerfile build
+# it too. Uses local Rust if there is one (rustup installs the pinned version
+# from rust-toolchain.toml), otherwise Docker:
 #   sh native/palette/build.sh
-# The toolchain is pinned so the committed binary can be rebuilt as is.
 set -eu
 cd "$(dirname "$0")"
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/src" -v hass-snapshotter-rustup:/usr/local/rustup -w /src rust:1.100-alpine \
-  sh -c 'rustup target add wasm32-unknown-unknown >/dev/null && cargo build --release'
+if command -v cargo >/dev/null 2>&1; then
+  cargo build --release
+else
+  MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/src" -v hass-snapshotter-rustup:/usr/local/rustup -w /src rust:1.100.0-alpine \
+    cargo build --release
+fi
 cp target/wasm32-unknown-unknown/release/palette.wasm ../../src/palette.wasm
-ls -l ../../src/palette.wasm

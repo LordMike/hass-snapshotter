@@ -1,5 +1,5 @@
 name: Build hass-snapshotter
-description: Install dependencies and run the tests
+description: Build the WebAssembly kernel, install dependencies and run the tests
 
 # Repository-owned build contract:
 # - CI provides the checked-out source and CI_* environment variables.
@@ -15,6 +15,11 @@ runs:
       with:
         node-version: 24
         cache: npm
+
+    # GitHub's runners have rustup; it installs the version in rust-toolchain.toml.
+    - name: Build the palette kernel (Rust to WebAssembly)
+      shell: bash
+      run: sh native/palette/build.sh
 
     - name: Install dependencies
       shell: bash
