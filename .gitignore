@@ -39,3 +39,7 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Rust build output (src/palette.wasm is the committed result)
+native/palette/target/
+native/palette/Cargo.lock

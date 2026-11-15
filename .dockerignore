@@ -10,3 +10,5 @@ translations
 pages
 *.md
 LICENSE.txt
+native
+bench

@@ -28,6 +28,6 @@ hass-snapshotter renders Home Assistant data to PNG images for e-paper displays,
 ## Repo conventions
 
 - `src/server.js`: HTTP, parameters, queue, child lifecycle. `src/page-worker.js`: one render per child process.
-- `src/pages.js`: page loading, `hass`/ctx, Takumi. `src/hass.js`: REST client. `src/image.js`: palette mapping and indexed PNG. `src/html.js`: escaping template tag. `src/debug.js`: the `.debug` page (request log, warnings, image).
+- `src/pages.js`: page loading, `hass`/ctx, Takumi. `src/hass.js`: REST client. `src/image.js`: palette rules, wasm glue and indexed PNG. `src/html.js`: escaping template tag. `src/debug.js`: the `.debug` page (request log, warnings, image).
 - `pages/`: example pages (also the default `PAGES_DIR` outside the app). They are not baked into the image.
-- Node ESM, Node 22.2+; no build step.
+- Node ESM, Node 22.2+; no build step for the JS. `native/palette`: the palette pixel loops in Rust; `sh native/palette/build.sh` (Docker) rebuilds the committed `src/palette.wasm` (WebAssembly SIMD, same code on amd64 and arm64). Check changes with `node bench/palette.js`, which compares every output with the run saved by `--save`.

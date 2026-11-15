@@ -1,4 +1,5 @@
 // Maps rendered RGBA pixels onto an e-paper panel's inks and writes an indexed PNG.
+import { readFileSync } from "node:fs";
 import { deflateSync, crc32, constants } from "node:zlib";
 
 const INKS = {
@@ -22,170 +23,57 @@ const GRAY_LEVELS = { gray4: 4, gray16: 16 };
 
 export const PALETTES = { ...INK_PALETTES, ...GRAY_LEVELS };
 
+// The pixel loops are Rust, built for WebAssembly with SIMD (native/palette,
+// `sh native/palette/build.sh`); compiled on first use. It holds one buffer, sized for
+// the largest image so far.
+let kernel = null;
+function palettes() {
+  kernel ??= new WebAssembly.Instance(new WebAssembly.Module(readFileSync(new URL("./palette.wasm", import.meta.url)))).exports;
+  return kernel;
+}
+
 /**
  * Maps RGBA pixels onto a panel palette and returns an indexed PNG whose
  * pixels are the panel's exact colours, so the display can map them 1:1.
  * No dithering: pages are flat UI, drawn in the panel's colours.
+ *
+ * Transparency is flattened onto white (a page without a background is
+ * transparent, which would read as black). Greyscale panels take the nearest
+ * grey level by luminance; anti-aliased edges stay soft greys instead of being
+ * cut to black or white.
+ *
+ * Colour panels: pixels that are exactly an ink keep it. Anti-aliased edges
+ * (pixels within 2 px of an exact ink) take the nearest of black, white and
+ * those inks, so black text on yellow never gains red fringes. Next to a thin
+ * stroke, an edge pixel joins the stroke from about 30% coverage instead of
+ * 50%, so small text keeps its strokes: the most common nearby ink is taken as
+ * the background and its squared distance is weighted by 5. A stroke counts as
+ * thin when the other ink has fewer than 6 exact pixels in the 5x5 window;
+ * edges of thick shapes (big digits, bars) use a plain 50% cut, which keeps
+ * curves clean. Other colours take the nearest ink overall.
  */
 export function applyPalette(rgba, width, height, name) {
-  // Takumi's raw output is straight RGBA; flatten transparency onto white
-  // (a page without a background is transparent, which would read as black).
-  for (let i = 3; i < rgba.length; i += 4) {
-    const a = rgba[i];
-    if (a === 255) continue;
-    for (let c = i - 3; c < i; c++) rgba[c] = Math.round((rgba[c] * a + 255 * (255 - a)) / 255);
-    rgba[i] = 255;
+  const k = palettes();
+  const base = k.prepare(width, height);
+  const mem = new Uint8Array(k.memory.buffer);
+  mem.set(rgba.subarray(0, width * height * 4), base + 32);
+  let inks;
+  let rows;
+  if (name in GRAY_LEVELS) {
+    const levels = GRAY_LEVELS[name];
+    inks = Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))));
+    rows = k.map_gray(width, height, levels);
+  } else {
+    inks = INK_PALETTES[name].map((ink) => INKS[ink]);
+    mem.set(inks.flatMap(([r, g, b]) => [r, g, b, 255]), base);
+    rows = k.map_inks(width, height, inks.length);
   }
-  if (name in GRAY_LEVELS) return grayPng(rgba, width, height, GRAY_LEVELS[name]);
-  const inks = INK_PALETTES[name].map((ink) => INKS[ink]);
-  return indexedPng(mapToInks(rgba, width, height, inks), width, height, inks);
-}
-
-// RGBA pixels as 32-bit words, without copying when the bytes are aligned.
-const pixelWords = (data, n) =>
-  data.byteOffset % 4 ? new Int32Array(data.slice().buffer, 0, n) : new Int32Array(data.buffer, data.byteOffset, n);
-
-// Each pixel takes the nearest grey level by luminance; anti-aliased edges stay
-// soft greys instead of being cut to black or white.
-function grayPng(rgba, width, height, levels) {
-  const inks = Array.from({ length: levels }, (_, i) => Array(3).fill(Math.round((i * 255) / (levels - 1))));
-  const out = new Uint8Array(width * height);
-  const words = pixelWords(rgba, out.length);
-  // Flat UI repeats colours in long runs: reuse the previous pixel's level.
-  let last = 0;
-  let level = 0;
-  for (let p = 0; p < out.length; p++) {
-    if (p === 0 || words[p] !== last) {
-      last = words[p];
-      const luma = 0.299 * rgba[p * 4] + 0.587 * rgba[p * 4 + 1] + 0.114 * rgba[p * 4 + 2];
-      level = Math.round((luma * (levels - 1)) / 255);
-    }
-    out[p] = level;
-  }
-  return indexedPng(out, width, height, inks);
-}
-
-// Next to a thin stroke, an edge pixel joins the stroke from about 30% coverage
-// instead of 50%, so small text keeps its strokes: the background ink's squared
-// distance is weighted by 5 (stroke wins when (1-c) < 2.24c). A stroke counts as
-// thin when the other ink has fewer than THICK exact pixels in the 5x5 window;
-// edges of thick shapes (big digits, bars) use a plain 50% cut, which keeps
-// curves clean.
-const BACKGROUND_WEIGHT = 5;
-const THICK = 6;
-
-/**
- * Pixels that are exactly an ink keep it. Anti-aliased edges (pixels within
- * 2 px of an exact ink) take the nearest of black, white and those inks, so
- * black text on yellow never gains red fringes; the most common nearby ink is
- * taken as the background and counts as further away, so thin strokes survive.
- * Other colours take the nearest ink overall.
- */
-function mapToInks(data, width, height, inks) {
-  const n = width * height;
-  const out = new Uint8Array(n);
-  const exact = new Int8Array(n).fill(-1);
-  // Whole pixels as 32-bit words (alpha is 255 by now), compared with the
-  // inks' words built the same way, so this works on any byte order.
-  const keys = new Int32Array(Uint8Array.from(inks.flatMap(([r, g, b]) => [r, g, b, 255])).buffer);
-  const words = pixelWords(data, n);
-  for (let p = 0; p < n; p++) {
-    const k = words[p];
-    for (let i = 0; i < keys.length; i++) {
-      if (keys[i] === k) {
-        exact[p] = i;
-        break;
-      }
-    }
-  }
-  // Exact pixels in each pixel's 5-wide row span, so a pixel with no exact
-  // ink in its 5x5 window is found with 5 reads instead of 25.
-  const near = new Uint8Array(n);
-  for (let y = 0; y < height; y++) {
-    const row = y * width;
-    let c = 0;
-    for (let x = 0; x < Math.min(2, width); x++) if (exact[row + x] >= 0) c++;
-    for (let x = 0; x < width; x++) {
-      if (x + 2 < width && exact[row + x + 2] >= 0) c++;
-      if (x - 3 >= 0 && exact[row + x - 3] >= 0) c--;
-      near[row + x] = c;
-    }
-  }
-  const inkIndex = (r, g, b) => inks.findIndex((ink) => ink[0] === r && ink[1] === g && ink[2] === b);
-  const baseMask = (1 << inkIndex(0, 0, 0)) | (1 << inkIndex(255, 255, 255));
-
-  const rgb = Int32Array.from(inks.flat());
-  const nearest = (p, mask, background) => {
-    const r = data[p * 4];
-    const g = data[p * 4 + 1];
-    const b = data[p * 4 + 2];
-    let best = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < inks.length; i++) {
-      if (!(mask & (1 << i))) continue;
-      const dr = r - rgb[i * 3];
-      const dg = g - rgb[i * 3 + 1];
-      const db = b - rgb[i * 3 + 2];
-      const d = (dr * dr + dg * dg + db * db) * (i === background ? BACKGROUND_WEIGHT : 1);
-      if (d < bestDist) {
-        best = i;
-        bestDist = d;
-      }
-    }
-    return best;
-  };
-  const allInks = (1 << inks.length) - 1;
-  const counts = new Uint16Array(inks.length);
-
-
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const p = y * width + x;
-      if (exact[p] >= 0) {
-        out[p] = exact[p];
-        continue;
-      }
-      const y0 = Math.max(0, y - 2);
-      const y1 = Math.min(height - 1, y + 2);
-      let any = 0;
-      for (let yy = y0; yy <= y1; yy++) any += near[yy * width + x];
-      if (!any) {
-        out[p] = nearest(p, allInks, -1);
-        continue;
-      }
-      let mask = baseMask;
-      counts.fill(0);
-      const x0 = Math.max(0, x - 2);
-      const x1 = Math.min(width - 1, x + 2);
-      for (let yy = y0; yy <= y1; yy++) {
-        for (let xx = x0; xx <= x1; xx++) {
-          const e = exact[yy * width + xx];
-          if (e >= 0) {
-            mask |= 1 << e;
-            counts[e]++;
-          }
-        }
-      }
-      let background = -1;
-      let max = 0;
-      let second = 0;
-      for (let i = 0; i < inks.length; i++) {
-        const c = counts[i];
-        if (c > max) {
-          second = max;
-          max = c;
-          background = i;
-        } else if (c > second) second = c;
-      }
-      if (second >= THICK) background = -1; // edge of a thick shape: plain 50% cut
-      out[p] = nearest(p, mask, background);
-    }
-  }
-  return out;
+  return indexedPng(mem.subarray(rows, rows + (width + 1) * height), width, height, inks);
 }
 
 // Minimal 8-bit indexed PNG: IHDR, PLTE with the inks, one IDAT, IEND.
-function indexedPng(indices, width, height, inks) {
+// `rows` are the scanlines: filter byte 0, then one index per pixel.
+function indexedPng(rows, width, height, inks) {
   const chunk = (type, data) => {
     const out = Buffer.alloc(12 + data.length);
     out.writeUInt32BE(data.length, 0);
@@ -198,9 +86,6 @@ function indexedPng(indices, width, height, inks) {
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr.set([8, 3, 0, 0, 0], 8); // bit depth 8, colour type 3 (palette)
-
-  const rows = Buffer.alloc((width + 1) * height); // each row: filter byte 0, then indices
-  for (let y = 0; y < height; y++) rows.set(indices.subarray(y * width, (y + 1) * width), y * (width + 1) + 1);
 
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
