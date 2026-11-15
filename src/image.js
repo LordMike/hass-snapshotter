@@ -60,11 +60,23 @@ function palettes() {
  * edges of thick shapes (big digits, bars) use a plain 50% cut, which keeps
  * curves clean. Other colours take the nearest ink overall.
  */
-export function applyPalette(rgba, width, height, name) {
+export function applyPalette(rgba, width, height, name, log = () => {}) {
+  // Each part's time goes to the debug page's log.
+  const steps = [];
+  let last = performance.now();
+  const step = (label) => {
+    const now = performance.now();
+    steps.push(`${label} ${(now - last).toFixed(1)} ms`);
+    last = now;
+  };
+  const compile = !kernel;
   const k = palettes();
+  if (compile) step("wasm compiled");
   const base = k.prepare(width, height);
+  step("buffer");
   const mem = new Uint8Array(k.memory.buffer);
   mem.set(rgba.subarray(0, width * height * 4), base + 32);
+  step("pixels copied");
   let inks;
   let rows;
   if (name in GRAY_LEVELS) {
@@ -76,7 +88,11 @@ export function applyPalette(rgba, width, height, name) {
     mem.set(inks.flatMap(([r, g, b]) => [r, g, b, 255]), base);
     rows = k.map_inks(width, height, inks.length);
   }
-  return indexedPng(mem.subarray(rows, rows + (width + 1) * height), width, height, inks);
+  step("mapped");
+  const png = indexedPng(mem.subarray(rows, rows + (width + 1) * height), width, height, inks);
+  step("PNG (deflate)");
+  log(`palette ${name}: ${steps.join(", ")}`);
+  return png;
 }
 
 // Minimal 8-bit indexed PNG: IHDR, PLTE with the inks, one IDAT, IEND.

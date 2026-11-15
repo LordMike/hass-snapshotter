@@ -262,7 +262,7 @@ export async function renderPageModule({ pagesDir, client }, name, { palette, fo
   mark("render");
   info(`Takumi rendered ${markup.length} characters of markup to ${w}x${h} pixels`);
   const { applyPalette } = await import("./image.js");
-  result.png = applyPalette(rgba, w, h, palette);
+  result.png = applyPalette(rgba, w, h, palette, info);
   mark("palette");
   info(`palette ${palette} applied, ${result.png.length} byte PNG`);
   return result;
